@@ -35,13 +35,6 @@ class ChannelConfig(BaseModel):
         return dict(v)
 
 
-class MemoryConfig(BaseModel):
-    """Memory backend configuration."""
-
-    backend: str = "json_file"
-    path: str = "data/"
-
-
 class SubAgentConfig(BaseModel):
     """Sub-agent configuration."""
 
@@ -62,7 +55,6 @@ class BotConfig(BaseModel):
 
     persona: PersonaConfig = Field(default_factory=PersonaConfig)
     channels: list[ChannelConfig] = Field(default_factory=list)
-    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     agents: dict[str, SubAgentConfig] = Field(default_factory=dict)
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
     log_level: str = "INFO"

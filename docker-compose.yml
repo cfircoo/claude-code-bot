@@ -8,7 +8,8 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
+      - ~/.claude:/root/.claude
     environment:
       - CONFIG_PATH=/app/config.yaml
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+   #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}

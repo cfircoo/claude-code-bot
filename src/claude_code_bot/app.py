@@ -1,13 +1,15 @@
-"""FastAPI application with chat and health endpoints."""
+"""FastAPI application with SSE streaming, conversation CRUD, and health endpoints."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from claude_code_bot.agent import AgentService
@@ -15,7 +17,7 @@ from claude_code_bot.agents import SubAgentRegistry, load_sub_agents_from_config
 from claude_code_bot.channels.telegram import TelegramChannel
 from claude_code_bot.config import BotConfig, load_config
 from claude_code_bot.logging import setup_logging
-from claude_code_bot.memory import create_memory_backend
+from claude_code_bot.memory import ConversationStore
 
 logger = structlog.get_logger()
 
@@ -23,15 +25,24 @@ logger = structlog.get_logger()
 _agent_service: AgentService | None = None
 _config: BotConfig | None = None
 _telegram: TelegramChannel | None = None
+_store: ConversationStore | None = None
 
 
-class ChatRequest(BaseModel):
+class ChatStreamRequest(BaseModel):
     user_id: str
     message: str
+    conversation_id: str | None = None
 
 
-class ChatResponse(BaseModel):
-    response: str
+class ConversationCreateRequest(BaseModel):
+    name: str | None = None
+
+
+class ConversationResponse(BaseModel):
+    conversation_id: str
+    name: str
+    created_at: float
+    last_active: float
 
 
 def _get_http_api_key() -> str | None:
@@ -52,7 +63,7 @@ def _has_channel(channel_type: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
-    global _agent_service, _config, _telegram
+    global _agent_service, _config, _telegram, _store
 
     import os
 
@@ -64,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     setup_logging(_config.log_level)
 
-    memory = create_memory_backend(_config.memory.backend, _config.memory.path)
+    _store = ConversationStore()
 
     try:
         registry = load_sub_agents_from_config(
@@ -73,7 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except ImportError:
         registry = SubAgentRegistry()
 
-    _agent_service = AgentService(config=_config, memory=memory, registry=registry)
+    _agent_service = AgentService(config=_config, store=_store, registry=registry)
 
     # Start Telegram if configured
     telegram_task: asyncio.Task[Any] | None = None
@@ -109,8 +120,9 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: Request, body: ChatRequest) -> ChatResponse:
+@app.post("/chat/stream")
+async def chat_stream(request: Request, body: ChatStreamRequest) -> StreamingResponse:
+    """SSE endpoint that streams events from chat_stream()."""
     api_key = _get_http_api_key()
     if api_key:
         provided_key = request.headers.get("X-API-Key", "")
@@ -118,17 +130,70 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     if not body.message.strip():
-        return ChatResponse(response="I didn't catch that. Could you try again?")
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     if _agent_service is None:
         raise HTTPException(status_code=503, detail="Bot not initialized")
 
-    response_text = await _agent_service.chat(
-        user_id=body.user_id,
-        message=body.message,
-        channel="http",
+    async def event_generator() -> AsyncGenerator[str, None]:
+        async for event in _agent_service.chat_stream(
+            user_id=body.user_id,
+            message=body.message,
+            conversation_id=body.conversation_id,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-    return ChatResponse(response=response_text)
+
+
+@app.get("/conversations/{user_id}", response_model=list[ConversationResponse])
+async def list_conversations(user_id: str) -> list[ConversationResponse]:
+    """List all conversations for a user."""
+    if _store is None:
+        raise HTTPException(status_code=503, detail="Store not initialized")
+    convos = _store.list(user_id)
+    return [
+        ConversationResponse(
+            conversation_id=c.conversation_id,
+            name=c.name,
+            created_at=c.created_at,
+            last_active=c.last_active,
+        )
+        for c in convos
+    ]
+
+
+@app.post("/conversations/{user_id}", response_model=ConversationResponse, status_code=201)
+async def create_conversation(
+    user_id: str, body: ConversationCreateRequest | None = None
+) -> ConversationResponse:
+    """Create a new conversation for a user."""
+    if _store is None:
+        raise HTTPException(status_code=503, detail="Store not initialized")
+    name = body.name if body else None
+    meta = _store.create(user_id, name=name)
+    return ConversationResponse(
+        conversation_id=meta.conversation_id,
+        name=meta.name,
+        created_at=meta.created_at,
+        last_active=meta.last_active,
+    )
+
+
+@app.delete("/conversations/{user_id}/{conversation_id}")
+async def delete_conversation(user_id: str, conversation_id: str) -> dict[str, str]:
+    """Delete a conversation."""
+    if _store is None:
+        raise HTTPException(status_code=503, detail="Store not initialized")
+    try:
+        _store.delete(user_id, conversation_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "deleted"}
 
 
 @app.post("/proactive")

@@ -1,17 +1,25 @@
-"""Main agent service powered by claude-agent-sdk."""
+"""Main agent service powered by claude-agent-sdk with streaming and session resume."""
 
 from __future__ import annotations
 
 import asyncio
-import time
+from typing import AsyncGenerator
 
 import structlog
-from claude_agent_sdk import query as claude_query, ClaudeAgentOptions
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ToolUseBlock,
+    query as claude_query,
+)
+from claude_agent_sdk.types import StreamEvent
 
-from claude_code_bot.config import BotConfig
-from claude_code_bot.memory import MemoryBackend, Message
 from claude_code_bot.agents import SubAgentRegistry
-
+from claude_code_bot.config import BotConfig
+from claude_code_bot.memory import ConversationMeta, ConversationStore
 logger = structlog.get_logger()
 
 MAX_RETRIES = 3
@@ -19,16 +27,16 @@ BACKOFF_BASE = 1.0
 
 
 class AgentService:
-    """Thin wrapper around claude-agent-sdk for persona-based conversations."""
+    """Agent service with streaming output and session resume."""
 
     def __init__(
         self,
         config: BotConfig,
-        memory: MemoryBackend,
+        store: ConversationStore,
         registry: SubAgentRegistry,
     ) -> None:
         self.config = config
-        self.memory = memory
+        self.store = store
         self.registry = registry
 
     def _build_system_prompt(self) -> str:
@@ -54,83 +62,106 @@ class AgentService:
 
         return "\n".join(parts)
 
-    def _format_history(self, messages: list[Message]) -> list[dict[str, str]]:
-        """Format message history for the SDK."""
-        return [{"role": m.role, "content": m.content} for m in messages]
+    def _resolve_conversation(
+        self, user_id: str, conversation_id: str | None
+    ) -> ConversationMeta:
+        """Get the target conversation, using most recent or auto-creating."""
+        if conversation_id:
+            meta = self.store.get(user_id, conversation_id)
+            if meta:
+                return meta
 
-    def _truncate_history(
-        self, messages: list[Message], max_messages: int = 50
-    ) -> list[Message]:
-        """Truncate history keeping most recent messages."""
-        if len(messages) <= max_messages:
-            return messages
-        removed = len(messages) - max_messages
-        logger.info("conversation_truncated", removed_messages=removed)
-        return messages[-max_messages:]
+        convos = self.store.list(user_id)
+        if convos:
+            return max(convos, key=lambda c: c.last_active)
 
-    async def chat(self, user_id: str, message: str, channel: str = "http") -> str:
-        """Process a user message and return the bot's response."""
-        # Load history
-        try:
-            history = await self.memory.load(user_id)
-        except Exception:
-            logger.warning("memory_load_failed", user_id=user_id)
-            history = []
+        return self.store.create(user_id)
 
-        # Add user message
-        user_msg = Message(role="user", content=message, timestamp=time.time())
-        history.append(user_msg)
+    async def chat_stream(
+        self,
+        user_id: str,
+        message: str,
+        conversation_id: str | None = None,
+    ) -> AsyncGenerator[dict[str, str], None]:
+        """Process a message and yield streaming events.
 
-        # Truncate if needed
-        history = self._truncate_history(history)
-
-        # Build prompt with history
+        Event types:
+          - {type: "text", content: str}
+          - {type: "tool_start", tool: str}
+          - {type: "tool_done", tool: str}
+          - {type: "result", content: str, session_id: str}
+          - {type: "error", content: str}
+          - {type: "conversation_switched", conversation_id: str}
+        """
+        meta = self._resolve_conversation(user_id, conversation_id)
         system_prompt = self._build_system_prompt()
-        conversation = self._format_history(history)
 
-        # Call claude-agent-sdk with retries
-        response_text = await self._call_with_retry(system_prompt, conversation)
-
-        # Save to memory
-        assistant_msg = Message(
-            role="assistant", content=response_text, timestamp=time.time()
+        options = ClaudeAgentOptions(
+            system_prompt=system_prompt,
+            include_partial_messages=True,
+            max_turns=1,
         )
-        history.append(assistant_msg)
-        try:
-            await self.memory.save(user_id, history)
-        except Exception:
-            logger.warning("memory_save_failed", user_id=user_id)
 
-        return response_text
+        if meta.session_id:
+            options.resume = meta.session_id
 
-    async def _call_with_retry(
-        self, system_prompt: str, conversation: list[dict[str, str]]
-    ) -> str:
-        """Call the LLM with exponential backoff retry."""
         last_error: Exception | None = None
-
-        # Build the prompt from conversation
-        prompt_parts = []
-        for msg in conversation:
-            prompt_parts.append(f"{msg['role']}: {msg['content']}")
-        prompt = "\n".join(prompt_parts)
+        active_tools: set[str] = set()
+        result_text_parts: list[str] = []
+        session_id: str | None = None
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                result_parts: list[str] = []
-                async for message in claude_query(
-                    prompt=prompt,
-                    options=ClaudeAgentOptions(
-                        system_prompt=system_prompt,
-                        max_turns=1,
-                    ),
-                ):
-                    if hasattr(message, "content"):
-                        for block in message.content:
-                            if hasattr(block, "text"):
-                                result_parts.append(block.text)
+                async for msg in claude_query(prompt=message, options=options):
+                    if isinstance(msg, SystemMessage):
+                        if msg.subtype == "init":
+                            sid = msg.data.get("session_id")
+                            if sid:
+                                session_id = sid
 
-                return "".join(result_parts) if result_parts else "..."
+                    elif isinstance(msg, StreamEvent):
+                        event = msg.event
+                        event_type = event.get("type", "")
+                        if event_type == "content_block_start":
+                            cb = event.get("content_block", {})
+                            if cb.get("type") == "tool_use":
+                                tool_name = cb.get("name", "unknown")
+                                active_tools.add(tool_name)
+                                yield {"type": "tool_start", "tool": tool_name}
+                            elif cb.get("type") == "text":
+                                pass  # text delta will follow
+                        elif event_type == "content_block_delta":
+                            delta = event.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                text = delta.get("text", "")
+                                if text:
+                                    yield {"type": "text", "content": text}
+
+                    elif isinstance(msg, AssistantMessage):
+                        for block in msg.content:
+                            if isinstance(block, ToolUseBlock):
+                                tool_name = block.name
+                                if tool_name in active_tools:
+                                    active_tools.discard(tool_name)
+                                    yield {"type": "tool_done", "tool": tool_name}
+
+                    elif isinstance(msg, ResultMessage):
+                        if msg.session_id:
+                            session_id = msg.session_id
+
+                # Success — persist session
+                import time
+
+                meta.last_active = time.time()
+                if session_id:
+                    meta.session_id = session_id
+                self.store.update(meta)
+
+                yield {
+                    "type": "result",
+                    "session_id": session_id or "",
+                }
+                return
 
             except Exception as e:
                 last_error = e
@@ -144,4 +175,14 @@ class AgentService:
                     await asyncio.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
 
         logger.error("llm_all_retries_exhausted", error=str(last_error))
-        return self.config.persona.fallback_message
+        yield {"type": "error", "content": self.config.persona.fallback_message}
+
+    async def chat(self, user_id: str, message: str, channel: str = "http") -> str:
+        """Non-streaming convenience method. Collects streamed text and returns it."""
+        parts: list[str] = []
+        async for event in self.chat_stream(user_id, message):
+            if event["type"] == "text":
+                parts.append(event.get("content", ""))
+            elif event["type"] == "error":
+                return event.get("content", "")
+        return "".join(parts) or "..."

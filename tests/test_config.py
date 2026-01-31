@@ -53,7 +53,6 @@ def test_load_config_defaults(tmp_path: Path) -> None:
     config = load_config(str(path))
     assert config.persona.name == "Assistant"
     assert config.persona.fallback_message.startswith("I'm having trouble")
-    assert config.memory.backend == "json_file"
     assert config.port == 8000
 
 
