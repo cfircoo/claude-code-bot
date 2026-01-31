@@ -1,16 +1,22 @@
 FROM python:3.11-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-COPY pyproject.toml .
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-editable
+
 COPY src/ src/
-
-RUN pip install --no-cache-dir .
-
 COPY config.example.yaml /app/config.yaml
 
 VOLUME ["/app/data"]
 
 EXPOSE 8000
 
-CMD ["python", "-m", "claude_code_bot"]
+CMD ["uv", "run", "python", "-m", "claude_code_bot"]
