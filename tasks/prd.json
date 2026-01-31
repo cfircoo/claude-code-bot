@@ -181,14 +181,14 @@
         { "command": "uv run mypy src/", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -k telegram -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 6,
-      "attempts": 0,
+      "attempts": 1,
       "maxAttempts": 3,
       "notes": "Mock bot.send_chat_action and agent.chat_stream in tests.",
       "blockedBy": ["US-103"],
       "docsToUpdate": [],
-      "completedAt": null,
+      "completedAt": "2026-02-01T14:30:00Z",
       "lastAttemptLog": ""
     },
     {

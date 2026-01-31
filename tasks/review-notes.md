@@ -17,3 +17,21 @@
 - **Related areas that may need attention:**
   - US-106 (Telegram) should follow similar streaming event handling patterns
   - US-107 cleanup should verify no references to old POST /chat in CLI tests
+
+## US-106: Update Telegram channel with typing indicator and streaming status
+- **Date:** 2026-02-01T14:30:00Z
+- **Additional test ideas:**
+  - Test handle_text and handle_start handlers directly via aiogram test utilities
+  - Test behavior when chat_stream raises an exception mid-stream (typing loop cleanup)
+  - Test with very long responses that exceed Telegram's 4096 char message limit
+- **Potential issues to watch:**
+  - Telegram has a 4096 character limit per message — long agent responses will be truncated
+  - show_tool_activity defaults to False — no config option to enable it yet
+  - Typing loop swallows all exceptions silently — may hide connection issues
+- **Suggestions for user:**
+  - Consider splitting long responses into multiple Telegram messages (4096 char chunks)
+  - Add config option for show_tool_activity per channel
+  - Consider showing a "thinking..." message for very long agent runs instead of just typing indicator
+- **Related areas that may need attention:**
+  - handle_start still uses agent.chat() fallback when no greeting configured — should use streaming too (already updated)
+  - US-107 should verify MemoryConfig cleanup doesn't break Telegram channel init

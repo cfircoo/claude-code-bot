@@ -17,3 +17,13 @@
   - `tests/test_cli.py::TestMainArgparse::test_debug_flag_in_help` — --debug in help
   - `tests/test_cli.py::TestMainArgparse::test_interactive_flag_in_help` — -i in help
 - **Coverage notes:** All event types covered. Interactive mode not tested (requires stdin mocking).
+
+## US-106: Update Telegram channel with typing indicator and streaming status
+- **Date:** 2026-02-01T14:30:00Z
+- **Tests created:**
+  - `tests/test_telegram.py::test_process_with_streaming_sends_typing_and_result` — typing action sent + result message delivered
+  - `tests/test_telegram.py::test_process_with_streaming_shows_tool_activity` — tool names in response when show_tool_activity=True
+  - `tests/test_telegram.py::test_process_with_streaming_error_event` — error events displayed to user
+  - `tests/test_telegram.py::test_process_with_streaming_conversation_switched` — conversation switch shown
+  - `tests/test_telegram.py::test_process_with_streaming_no_response` — "No response." fallback
+- **Coverage notes:** Handler integration (handle_text calling _process_with_streaming) not directly tested — would require simulating aiogram dispatch.

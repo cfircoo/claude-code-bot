@@ -63,3 +63,16 @@ Started: Sat Jan 31 23:50:30 IST 2026
 - Graceful handling of malformed JSON in SSE stream
 - 13 new tests in test_cli.py, all 86 tests pass, mypy clean, ruff clean
 - Uses httpx.stream() with 300s read timeout for long-running agent responses
+
+## US-106: Update Telegram channel with typing indicator and streaming status - DONE
+- Replaced agent.chat() calls with chat_stream() via _process_with_streaming()
+- Typing indicator sent via _send_typing_loop() running concurrently with stream processing
+- Typing action refreshed every 4 seconds (Telegram typing expires after ~5s)
+- Tool activity optionally shown in response via show_tool_activity flag (default: off)
+- Conversation management works via natural language (agent's MCP tools handle it)
+- Error events shown to user with "Error: " prefix
+- Conversation switched events shown when tool activity is enabled
+- "No response." fallback when stream yields no result event
+- Removed old US-106 TODO comment from proactive_message
+- Added ChatAction import from aiogram.enums
+- 5 new tests (streaming result, tool activity, error, conversation switch, no response), all 91 tests pass, mypy clean
