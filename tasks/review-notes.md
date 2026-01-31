@@ -1,16 +1,19 @@
 # Ralph Review Notes
 
-## US-102: Create conversation management MCP tools
-- **Date:** 2026-01-31T23:00:00Z
+## US-103: Rewrite AgentService with streaming and session resume
+- **Date:** 2026-02-01T00:30:00Z
 - **Additional test ideas:**
-  - Edge case: what happens when switch_conversation is called with empty string?
-  - Missing: no concurrency test (two tools modifying same user's file simultaneously)
-  - Could test that list_conversations returns items sorted by last_active
+  - Edge case: what happens when store.update() fails after a successful query (session_id lost)
+  - Missing: no test for the backward-compatible chat() method directly
+  - Missing: no test for concurrent chat_stream calls for the same user (race on conversation resolution)
 - **Potential issues to watch:**
-  - The switch_conversation tool only confirms the conversation exists — the actual "switching" logic will be in AgentService (US-103). The tool is a signal, not a state change.
-  - Tool input_schema uses simple `{"name": str}` — the SDK may or may not enforce required vs optional. `create_conversation` treats missing `name` as None which works, but verify SDK behavior.
+  - The `import time` inside chat_stream is a minor code smell — could be at module level
+  - StreamEvent.event dict structure depends on Anthropic API internals — may change across SDK versions
+  - The tool_done detection relies on AssistantMessage arriving after StreamEvent tool_start — if SDK changes ordering, tool_done events could be missed
 - **Suggestions for user:**
-  - Consider whether `switch_conversation` should update `last_active` timestamp on the target conversation
-  - The `delete_conversation` tool doesn't warn if deleting the currently active conversation — US-103 should handle this gracefully
+  - Consider adding a timeout to the overall chat_stream call (not just per-retry)
+  - The conversation_switched event only fires for switch_conversation tool — if the agent creates a new conversation and immediately uses it, no switch event is emitted
+  - May want to add a max_turns limit to prevent runaway agent loops
 - **Related areas that may need attention:**
-  - US-103 will need to wire these tools into AgentService via `mcp_servers` option and handle the `conversation_switched` event type
+  - app.py POST /chat still uses the sync chat() wrapper — US-104 will replace with SSE
+  - telegram.py uses chat() — US-106 will migrate to chat_stream with typing indicators

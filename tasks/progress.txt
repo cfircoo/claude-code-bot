@@ -22,3 +22,19 @@ Started: Sat Jan 31 23:50:30 IST 2026
 - Note: McpSdkServerConfig is actually a TypedDict (dict), not a class instance
 - Note: SdkMcpTool has .handler attribute for the async callable, .name for tool name
 - 10 new tests in test_tools.py, all 54 tests pass, mypy clean, ruff clean
+
+## US-103: Rewrite AgentService with streaming and session resume - DONE
+- Rewrote agent.py with chat_stream() async generator yielding event dicts
+- Event types: text, tool_start, tool_done, result, error, conversation_switched
+- include_partial_messages=True for StreamEvent streaming
+- Session resume: passes resume=session_id to ClaudeAgentOptions when meta.session_id exists
+- Captures session_id from SystemMessage(subtype="init") and ResultMessage
+- Persists session_id and last_active to ConversationMeta after each interaction
+- Auto-creates conversation if none exists, uses most recent if conversation_id is None
+- MCP conversation tools registered via mcp_servers with allowed_tools
+- System prompt includes conversation management instruction
+- Retry with exponential backoff (3 attempts)
+- Added backward-compatible chat() method that consumes chat_stream()
+- 15 new tests in test_agent.py (was 4), all 65 tests pass, mypy clean, ruff clean
+- SDK types: StreamEvent.event is a raw dict, AssistantMessage.content has TextBlock/ToolUseBlock
+- ClaudeAgentOptions.mcp_servers accepts dict[str, McpServerConfig] (McpSdkServerConfig is a subtype)

@@ -92,14 +92,14 @@
         { "command": "uv run mypy src/", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -k agent -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 3,
-      "attempts": 0,
+      "attempts": 1,
       "maxAttempts": 3,
       "notes": "Mock claude_agent_sdk.query to yield fake SystemMessage(init) + StreamEvent + AssistantMessage + ResultMessage. Test session_id capture, streaming events, conversation auto-create, resume option passing.",
       "blockedBy": ["US-101", "US-102"],
       "docsToUpdate": [],
-      "completedAt": null,
+      "completedAt": "2026-02-01T00:30:00Z",
       "lastAttemptLog": ""
     },
     {
