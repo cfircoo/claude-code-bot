@@ -1,19 +1,19 @@
 # Ralph Review Notes
 
-## US-104: Add SSE streaming endpoint and conversation REST API
-- **Date:** 2026-02-01T12:00:00Z
+## US-105: Update CLI agent.py with streaming display
+- **Date:** 2026-02-01T14:00:00Z
 - **Additional test ideas:**
-  - No test for SSE connection drop mid-stream (client disconnect handling)
-  - No test for very large conversation lists (pagination not implemented)
-  - No auth on conversation CRUD endpoints — currently anyone can access any user's conversations
+  - Interactive mode test with mocked stdin (EOFError, "quit", normal flow)
+  - Test with API key authentication header if HTTP channel has api_key configured
+  - Test behavior when server closes connection mid-stream
 - **Potential issues to watch:**
-  - Conversation endpoints have no authentication — the user_id is in the URL path, no verification the caller owns it
-  - No pagination on list_conversations — could be slow with many conversations
-  - SSE streaming doesn't set a timeout — long-running agent calls could hang the connection
+  - No API key support in CLI yet — if HTTP channel requires auth, CLI will get 401
+  - 300s read timeout may not be enough for very long agent runs
+  - No retry on connection drop during streaming (single attempt)
 - **Suggestions for user:**
-  - Consider adding API key auth to conversation CRUD endpoints (same as chat)
-  - Consider adding pagination to GET /conversations/{user_id}
-  - The old POST /chat endpoint was removed — any clients using it need to migrate to /chat/stream
+  - Consider adding `--api-key` flag for authenticated HTTP channels
+  - Consider adding color/ANSI formatting for tool indicators and result separator
+  - May want to persist conversation_id between interactive mode messages (currently must be set via flag)
 - **Related areas that may need attention:**
-  - US-105 (CLI) will need to consume the new SSE format
-  - US-106 (Telegram) uses chat_stream() directly, not the HTTP endpoint — no impact
+  - US-106 (Telegram) should follow similar streaming event handling patterns
+  - US-107 cleanup should verify no references to old POST /chat in CLI tests

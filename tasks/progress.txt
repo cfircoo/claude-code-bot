@@ -50,3 +50,16 @@ Started: Sat Jan 31 23:50:30 IST 2026
 - Lifespan now stores ConversationStore in _store module var for CRUD endpoints
 - 13 new tests in test_stream_and_conversations.py, all 73 tests pass, mypy clean, ruff clean
 - Note: empty message on /chat/stream returns 400 (not 200 with fallback like old /chat)
+
+## US-105: Update CLI agent.py with streaming display - DONE
+- Rewrote agent.py to use POST /chat/stream SSE endpoint instead of old POST /chat
+- Text tokens printed incrementally via sys.stdout.write/flush (no buffering)
+- Tool use shown as: [Using ToolName...] done
+- Subagent activity indented with ↳ when parent_tool_use_id present
+- Final result delineated with ─ separator line
+- Added --conversation flag to target specific conversation
+- --debug shows raw SSE events and request details
+- Interactive mode (-i) works with streaming
+- Graceful handling of malformed JSON in SSE stream
+- 13 new tests in test_cli.py, all 86 tests pass, mypy clean, ruff clean
+- Uses httpx.stream() with 300s read timeout for long-running agent responses

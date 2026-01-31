@@ -151,16 +151,17 @@
       ],
       "verificationCommands": [
         { "command": "uv run ruff check agent.py", "expect": "exit_code:0" },
-        { "command": "uv run python agent.py --help", "expect": "contains:conversation" }
+        { "command": "uv run python agent.py --help", "expect": "contains:conversation" },
+        { "command": "uv run pytest tests/test_cli.py -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 5,
-      "attempts": 0,
+      "attempts": 1,
       "maxAttempts": 3,
       "notes": "Use httpx streaming response to read SSE. Parse 'data: ' lines as JSON events.",
       "blockedBy": ["US-104"],
       "docsToUpdate": [],
-      "completedAt": null,
+      "completedAt": "2026-02-01T14:00:00Z",
       "lastAttemptLog": ""
     },
     {
