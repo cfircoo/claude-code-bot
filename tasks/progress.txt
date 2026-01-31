@@ -38,3 +38,15 @@ Started: Sat Jan 31 23:50:30 IST 2026
 - 15 new tests in test_agent.py (was 4), all 65 tests pass, mypy clean, ruff clean
 - SDK types: StreamEvent.event is a raw dict, AssistantMessage.content has TextBlock/ToolUseBlock
 - ClaudeAgentOptions.mcp_servers accepts dict[str, McpServerConfig] (McpSdkServerConfig is a subtype)
+
+## US-104: Add SSE streaming endpoint and conversation REST API - DONE
+- Added POST /chat/stream SSE endpoint streaming events from chat_stream()
+- SSE format: "data: {json}\n\n" for each event
+- Added GET /conversations/{user_id} returning list of ConversationResponse
+- Added POST /conversations/{user_id} with optional {name} body (201 status)
+- Added DELETE /conversations/{user_id}/{conversation_id} (404 if not found)
+- ConversationResponse model: conversation_id, name, created_at, last_active
+- Removed old POST /chat endpoint (replaced test_chat.py with stub)
+- Lifespan now stores ConversationStore in _store module var for CRUD endpoints
+- 13 new tests in test_stream_and_conversations.py, all 73 tests pass, mypy clean, ruff clean
+- Note: empty message on /chat/stream returns 400 (not 200 with fallback like old /chat)

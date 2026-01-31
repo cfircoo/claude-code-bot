@@ -123,14 +123,14 @@
         { "command": "uv run mypy src/", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -k 'chat or conversation' -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 4,
-      "attempts": 0,
+      "attempts": 1,
       "maxAttempts": 3,
       "notes": "Test SSE endpoint with httpx streaming. Test conversation CRUD endpoints. Mock AgentService.chat_stream to yield test events.",
       "blockedBy": ["US-103"],
       "docsToUpdate": [],
-      "completedAt": null,
+      "completedAt": "2026-02-01T12:00:00Z",
       "lastAttemptLog": ""
     },
     {

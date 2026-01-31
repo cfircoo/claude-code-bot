@@ -3,31 +3,33 @@
 ## US-101: Replace memory.py with ConversationStore
 - **Date:** 2026-01-31T22:00:00Z
 - **Tests created:**
-  - `tests/test_conversation_store.py` — 13 tests for ConversationStore CRUD, auto-name, safe ID, persistence
-- **Tests modified:**
-  - `tests/test_agent.py` — rewritten for new AgentService signature (4 tests)
+  - `tests/test_conversation_store.py` — 13 tests for ConversationStore CRUD, auto-name, persistence, safe ID
 
 ## US-102: Create conversation management MCP tools
 - **Date:** 2026-01-31T23:00:00Z
 - **Tests created:**
-  - `tests/test_tools.py` — 10 tests for list, create, switch, delete tools + config structure
+  - `tests/test_tools.py` — 10 tests for list, create, switch, delete tool handlers + config
 
 ## US-103: Rewrite AgentService with streaming and session resume
 - **Date:** 2026-02-01T00:30:00Z
 - **Tests created:**
-  - `tests/test_agent.py::test_resolve_conversation_creates_new` — auto-create when no conversations exist
-  - `tests/test_agent.py::test_resolve_conversation_uses_most_recent` — picks most recent by last_active
-  - `tests/test_agent.py::test_resolve_conversation_by_id` — resolves specific conversation
-  - `tests/test_agent.py::test_resolve_conversation_fallback_on_bad_id` — falls back to most recent on bad ID
-  - `tests/test_agent.py::test_chat_stream_captures_session_id` — captures from SystemMessage init + persists
-  - `tests/test_agent.py::test_chat_stream_resumes_session` — passes resume option when session_id exists
-  - `tests/test_agent.py::test_chat_stream_text_events` — yields text events from StreamEvent deltas
-  - `tests/test_agent.py::test_chat_stream_tool_events` — yields tool_start/tool_done events
-  - `tests/test_agent.py::test_chat_stream_conversation_switched` — emits conversation_switched on tool use
-  - `tests/test_agent.py::test_chat_stream_retries_on_failure` — retries transient errors with backoff
-  - `tests/test_agent.py::test_chat_stream_all_retries_exhausted` — yields error after max retries
-  - `tests/test_agent.py::test_chat_stream_auto_creates_conversation` — creates conversation on first message
-  - `tests/test_agent.py::test_chat_stream_registers_mcp_tools` — passes MCP config to options
+  - `tests/test_agent.py` — 15 tests for chat_stream events, session capture/resume, retries, MCP registration
+
+## US-104: Add SSE streaming endpoint and conversation REST API
+- **Date:** 2026-02-01T12:00:00Z
+- **Tests created:**
+  - `tests/test_stream_and_conversations.py::test_chat_stream_returns_sse` — verifies SSE format and event parsing
+  - `tests/test_stream_and_conversations.py::test_chat_stream_passes_conversation_id` — verifies conversation_id forwarded
+  - `tests/test_stream_and_conversations.py::test_chat_stream_empty_message` — 400 on empty message
+  - `tests/test_stream_and_conversations.py::test_chat_stream_auth_rejected` — 401 without API key
+  - `tests/test_stream_and_conversations.py::test_chat_stream_auth_accepted` — 200 with correct API key
+  - `tests/test_stream_and_conversations.py::test_chat_stream_not_initialized` — 503 when service not ready
+  - `tests/test_stream_and_conversations.py::test_list_conversations` — GET returns conversation list
+  - `tests/test_stream_and_conversations.py::test_list_conversations_empty` — GET returns empty list
+  - `tests/test_stream_and_conversations.py::test_create_conversation_with_name` — POST with name returns 201
+  - `tests/test_stream_and_conversations.py::test_create_conversation_without_name` — POST without body returns 201
+  - `tests/test_stream_and_conversations.py::test_delete_conversation` — DELETE returns 200
+  - `tests/test_stream_and_conversations.py::test_delete_conversation_not_found` — DELETE returns 404
+  - `tests/test_stream_and_conversations.py::test_conversation_store_not_initialized` — 503 when store not ready
 - **Tests modified:**
-  - `tests/test_agent.py::test_build_system_prompt` — updated to check conversation instruction
-- **Coverage notes:** 15 tests covering streaming, session resume, retry, conversation resolution, MCP registration
+  - `tests/test_chat.py` — replaced with stub (old /chat endpoint removed)
