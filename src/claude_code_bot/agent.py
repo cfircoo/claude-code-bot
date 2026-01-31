@@ -20,17 +20,10 @@ from claude_agent_sdk.types import StreamEvent
 from claude_code_bot.agents import SubAgentRegistry
 from claude_code_bot.config import BotConfig
 from claude_code_bot.memory import ConversationMeta, ConversationStore
-from claude_code_bot.tools import create_conversation_tools
-
 logger = structlog.get_logger()
 
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0
-
-CONVERSATION_INSTRUCTION = (
-    "\n\nYou can manage conversations when the user asks. "
-    "Use the conversation tools to list, create, switch, or delete conversations."
-)
 
 
 class AgentService:
@@ -67,7 +60,6 @@ class AgentService:
                 "\nTo use a sub-agent, call the corresponding tool with a 'query' parameter."
             )
 
-        parts.append(CONVERSATION_INSTRUCTION)
         return "\n".join(parts)
 
     def _resolve_conversation(
@@ -104,19 +96,10 @@ class AgentService:
         meta = self._resolve_conversation(user_id, conversation_id)
         system_prompt = self._build_system_prompt()
 
-        mcp_tools = create_conversation_tools(self.store, user_id)
-        mcp_servers: dict[str, object] = {"conversations": mcp_tools}
-
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             include_partial_messages=True,
-            mcp_servers=mcp_servers,  # type: ignore[arg-type]
-            allowed_tools=[
-                "mcp__conversations__list_conversations",
-                "mcp__conversations__create_conversation",
-                "mcp__conversations__switch_conversation",
-                "mcp__conversations__delete_conversation",
-            ],
+            max_turns=1,
         )
 
         if meta.session_id:
@@ -156,27 +139,15 @@ class AgentService:
 
                     elif isinstance(msg, AssistantMessage):
                         for block in msg.content:
-                            if isinstance(block, TextBlock):
-                                result_text_parts.append(block.text)
-                            elif isinstance(block, ToolUseBlock):
+                            if isinstance(block, ToolUseBlock):
                                 tool_name = block.name
                                 if tool_name in active_tools:
                                     active_tools.discard(tool_name)
                                     yield {"type": "tool_done", "tool": tool_name}
-                                # Check for conversation switch
-                                if tool_name == "mcp__conversations__switch_conversation":
-                                    switched_id = block.input.get("conversation_id", "")
-                                    if switched_id:
-                                        yield {
-                                            "type": "conversation_switched",
-                                            "conversation_id": switched_id,
-                                        }
 
                     elif isinstance(msg, ResultMessage):
                         if msg.session_id:
                             session_id = msg.session_id
-                        if msg.result:
-                            result_text_parts.append(msg.result)
 
                 # Success — persist session
                 import time
@@ -186,10 +157,8 @@ class AgentService:
                     meta.session_id = session_id
                 self.store.update(meta)
 
-                final_text = "".join(result_text_parts) or "..."
                 yield {
                     "type": "result",
-                    "content": final_text,
                     "session_id": session_id or "",
                 }
                 return
@@ -209,11 +178,11 @@ class AgentService:
         yield {"type": "error", "content": self.config.persona.fallback_message}
 
     async def chat(self, user_id: str, message: str, channel: str = "http") -> str:
-        """Non-streaming convenience method. Consumes chat_stream and returns final text."""
-        result = ""
+        """Non-streaming convenience method. Collects streamed text and returns it."""
+        parts: list[str] = []
         async for event in self.chat_stream(user_id, message):
-            if event["type"] == "result":
-                result = event["content"]
+            if event["type"] == "text":
+                parts.append(event.get("content", ""))
             elif event["type"] == "error":
-                result = event["content"]
-        return result
+                return event.get("content", "")
+        return "".join(parts) or "..."

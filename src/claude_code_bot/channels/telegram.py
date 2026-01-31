@@ -66,7 +66,7 @@ class TelegramChannel:
         stop_typing = asyncio.Event()
         typing_task = asyncio.create_task(self._send_typing_loop(chat_id, stop_typing))
 
-        result_text = ""
+        text_parts: list[str] = []
         tool_activities: list[str] = []
 
         try:
@@ -75,10 +75,10 @@ class TelegramChannel:
             ):
                 event_type = event.get("type", "")
 
-                if event_type == "result":
-                    result_text = event.get("content", "")
+                if event_type == "text":
+                    text_parts.append(event.get("content", ""))
                 elif event_type == "error":
-                    result_text = f"Error: {event.get('content', 'unknown error')}"
+                    text_parts.append(f"Error: {event.get('content', 'unknown error')}")
                 elif event_type == "tool_start" and self.show_tool_activity:
                     tool_activities.append(event.get("tool", ""))
                 elif event_type == "conversation_switched":
@@ -93,6 +93,7 @@ class TelegramChannel:
         if self.show_tool_activity and tool_activities:
             status_line = "Used: " + ", ".join(tool_activities)
             response_parts.append(status_line)
+        result_text = "".join(text_parts)
         if result_text:
             response_parts.append(result_text)
 

@@ -119,11 +119,9 @@ def send_streaming(
 
                 elif event_type == "result":
                     if in_text:
-                        print()  # newline after text
+                        print()
                         in_text = False
-                    content = event.get("content", "")
-                    print(f"\n{'─' * 40}")
-                    print(f"Bot: {content}\n")
+                    print()
 
                 elif event_type == "error":
                     if in_text:
