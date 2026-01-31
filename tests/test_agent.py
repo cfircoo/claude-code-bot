@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from claude_code_bot.agent import AgentService
 from claude_code_bot.agents import BaseSubAgent, SubAgentRegistry
 from claude_code_bot.config import BotConfig, PersonaConfig
-from claude_code_bot.memory import JsonFileMemoryBackend, Message
+from claude_code_bot.memory import ConversationStore
 
 
 @pytest.fixture
@@ -26,8 +26,8 @@ def config() -> BotConfig:
 
 
 @pytest.fixture
-def memory(tmp_path):
-    return JsonFileMemoryBackend(path=str(tmp_path))
+def store(tmp_path: Path) -> ConversationStore:
+    return ConversationStore(path=str(tmp_path))
 
 
 @pytest.fixture
@@ -36,8 +36,8 @@ def registry() -> SubAgentRegistry:
 
 
 @pytest.fixture
-def agent(config, memory, registry) -> AgentService:
-    return AgentService(config=config, memory=memory, registry=registry)
+def agent(config: BotConfig, store: ConversationStore, registry: SubAgentRegistry) -> AgentService:
+    return AgentService(config=config, store=store, registry=registry)
 
 
 def _make_mock_query(text: str):
@@ -73,22 +73,6 @@ def test_build_system_prompt_with_agents(agent: AgentService) -> None:
     assert "Helps with stuff" in prompt
 
 
-def test_truncate_history(agent: AgentService) -> None:
-    messages = [
-        Message(role="user", content=f"msg{i}", timestamp=time.time())
-        for i in range(100)
-    ]
-    truncated = agent._truncate_history(messages, max_messages=10)
-    assert len(truncated) == 10
-    assert truncated[0].content == "msg90"
-
-
-def test_truncate_history_no_op_when_short(agent: AgentService) -> None:
-    messages = [Message(role="user", content="hi", timestamp=time.time())]
-    truncated = agent._truncate_history(messages, max_messages=50)
-    assert len(truncated) == 1
-
-
 @pytest.mark.asyncio
 async def test_chat_returns_fallback_on_llm_failure(agent: AgentService) -> None:
     with patch("claude_code_bot.agent.claude_query", side_effect=Exception("API down")):
@@ -97,25 +81,8 @@ async def test_chat_returns_fallback_on_llm_failure(agent: AgentService) -> None
 
 
 @pytest.mark.asyncio
-async def test_chat_saves_to_memory(agent: AgentService) -> None:
+async def test_chat_returns_response(agent: AgentService) -> None:
     mock_fn = _make_mock_query("Hello back!")
     with patch("claude_code_bot.agent.claude_query", mock_fn):
         result = await agent.chat("user1", "hello")
-
     assert "Hello back!" in result
-    history = await agent.memory.load("user1")
-    assert len(history) == 2
-    assert history[0].role == "user"
-    assert history[1].role == "assistant"
-
-
-@pytest.mark.asyncio
-async def test_chat_continues_on_memory_save_failure(agent: AgentService) -> None:
-    mock_fn = _make_mock_query("Response")
-    with (
-        patch("claude_code_bot.agent.claude_query", mock_fn),
-        patch.object(agent.memory, "save", side_effect=IOError("disk full")),
-    ):
-        result = await agent.chat("user1", "hello")
-
-    assert "Response" in result

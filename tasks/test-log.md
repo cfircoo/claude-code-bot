@@ -1,0 +1,22 @@
+## US-101: Replace memory.py with ConversationStore
+- **Date:** 2026-01-31T22:00:00Z
+- **Tests created:**
+  - `tests/test_conversation_store.py::test_create_conversation` — create with explicit name
+  - `tests/test_conversation_store.py::test_create_auto_name` — auto-generated "Conversation N" names
+  - `tests/test_conversation_store.py::test_list_conversations` — list multiple conversations
+  - `tests/test_conversation_store.py::test_list_empty` — list for unknown user
+  - `tests/test_conversation_store.py::test_get_conversation` — get by ID
+  - `tests/test_conversation_store.py::test_get_nonexistent` — get returns None for missing
+  - `tests/test_conversation_store.py::test_update_conversation` — update name and session_id
+  - `tests/test_conversation_store.py::test_update_nonexistent` — KeyError on missing
+  - `tests/test_conversation_store.py::test_delete_conversation` — delete by ID
+  - `tests/test_conversation_store.py::test_delete_nonexistent` — KeyError on missing
+  - `tests/test_conversation_store.py::test_safe_user_id` — / and .. sanitized
+  - `tests/test_conversation_store.py::test_persistence` — data survives new instance
+  - `tests/test_conversation_store.py::test_dir_auto_created` — nested dirs created
+- **Tests modified:**
+  - `tests/test_agent.py` — rewritten to use ConversationStore, removed truncate/history tests
+  - `tests/test_telegram.py::test_proactive_message_persists_to_memory` → renamed to `test_proactive_message_sends_without_persistence`
+- **Tests removed:**
+  - `tests/test_memory.py` — old MemoryBackend tests
+- **Coverage notes:** All ConversationStore CRUD operations covered

@@ -104,19 +104,7 @@ class TelegramChannel:
         await self.bot.send_message(chat_id=chat_id, text=text)
         logger.info("proactive_message_sent", user_id=user_id)
 
-        # Persist in memory
-        if self._agent_service:
-            import time
-            from claude_code_bot.memory import Message as MemMessage
-
-            try:
-                history = await self._agent_service.memory.load(user_id)
-                history.append(
-                    MemMessage(role="assistant", content=text, timestamp=time.time())
-                )
-                await self._agent_service.memory.save(user_id, history)
-            except Exception:
-                logger.warning("proactive_message_memory_save_failed", user_id=user_id)
+        # Note: conversation persistence will be handled via ConversationStore in US-106
 
     async def start_polling(self) -> None:
         """Start long-polling for Telegram updates."""

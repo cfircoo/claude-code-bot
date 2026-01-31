@@ -15,7 +15,7 @@ from claude_code_bot.agents import SubAgentRegistry, load_sub_agents_from_config
 from claude_code_bot.channels.telegram import TelegramChannel
 from claude_code_bot.config import BotConfig, load_config
 from claude_code_bot.logging import setup_logging
-from claude_code_bot.memory import create_memory_backend
+from claude_code_bot.memory import ConversationStore
 
 logger = structlog.get_logger()
 
@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     setup_logging(_config.log_level)
 
-    memory = create_memory_backend(_config.memory.backend, _config.memory.path)
+    store = ConversationStore()
 
     try:
         registry = load_sub_agents_from_config(
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except ImportError:
         registry = SubAgentRegistry()
 
-    _agent_service = AgentService(config=_config, memory=memory, registry=registry)
+    _agent_service = AgentService(config=_config, store=store, registry=registry)
 
     # Start Telegram if configured
     telegram_task: asyncio.Task[Any] | None = None

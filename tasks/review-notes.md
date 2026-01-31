@@ -1,0 +1,16 @@
+## US-101: Replace memory.py with ConversationStore
+- **Date:** 2026-01-31T22:00:00Z
+- **Additional test ideas:**
+  - Concurrent writes to same user file (race condition on read-modify-write)
+  - Large number of conversations per user (performance of linear scan in get/delete)
+  - Unicode in conversation names and user IDs
+- **Potential issues to watch:**
+  - ConversationStore uses synchronous file I/O (read_text/write_text) — fine for now but may need async if high concurrency
+  - No file locking — concurrent processes could corrupt JSON
+  - MemoryConfig still in BotConfig (config.py) — unused but harmless until US-107
+- **Suggestions for user:**
+  - Consider adding a max conversations per user limit
+  - The safe_user_id sanitization is basic — may want to use a hash for very long IDs
+- **Related areas that may need attention:**
+  - agent.py chat() no longer tracks conversation history — US-103 will restore this with streaming
+  - Telegram proactive messages no longer persist — US-106 will handle this

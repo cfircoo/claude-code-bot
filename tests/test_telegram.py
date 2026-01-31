@@ -62,7 +62,7 @@ async def test_proactive_message_known_user(config: BotConfig) -> None:
 
 
 @pytest.mark.asyncio
-async def test_proactive_message_persists_to_memory(config: BotConfig) -> None:
+async def test_proactive_message_sends_without_persistence(config: BotConfig) -> None:
     with patch("claude_code_bot.channels.telegram.Bot") as MockBot:
         mock_bot = MockBot.return_value
         mock_bot.send_message = AsyncMock()
@@ -70,15 +70,11 @@ async def test_proactive_message_persists_to_memory(config: BotConfig) -> None:
         channel = TelegramChannel(bot_token="123:ABC", config=config)
         channel._known_chat_ids.add(999)
 
-        # Set up mock agent service with memory
         mock_agent = MagicMock()
-        mock_agent.memory = MagicMock()
-        mock_agent.memory.load = AsyncMock(return_value=[])
-        mock_agent.memory.save = AsyncMock()
         channel.set_agent_service(mock_agent)
 
         await channel.send_proactive_message("999", "Reminder!")
-        mock_agent.memory.save.assert_called_once()
+        mock_bot.send_message.assert_called_once()
 
 
 @pytest.mark.asyncio

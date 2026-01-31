@@ -1,0 +1,14 @@
+# Ralph Progress Log
+Started: Sat Jan 31 23:50:30 IST 2026
+---
+
+## US-101: Replace memory.py with ConversationStore - DONE
+- Replaced Message/MemoryBackend/JsonFileMemoryBackend with ConversationMeta/ConversationStore
+- Storage: data/conversations/{safe_user_id}.json as JSON array
+- Updated agent.py: simplified chat() method, uses ConversationStore (store param instead of memory)
+- Updated app.py: uses ConversationStore() directly instead of create_memory_backend()
+- Updated telegram.py: removed memory persistence in proactive messages (deferred to US-106)
+- Removed old test_memory.py, rewrote test_agent.py, added test_conversation_store.py (13 tests)
+- All 44 tests pass, mypy clean, ruff clean
+- Note: agent.py chat() is simplified (no history tracking) — US-103 will fully rewrite it
+- Note: MemoryConfig still exists in config.py — US-107 will clean it up
