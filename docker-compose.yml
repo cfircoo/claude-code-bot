@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+    environment:
+      - CONFIG_PATH=/app/config.yaml
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}

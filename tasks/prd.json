@@ -1,0 +1,527 @@
+{
+  "project": "Claude Code Bot",
+  "branchName": "ralph/claude-code-bot-mvp",
+  "description": "Python framework for AI-powered conversational bots with YAML config, HTTP/Telegram channels, per-user memory, and sub-agent orchestration using claude-agent-sdk",
+  "testCommands": {
+    "unit": "pytest tests/",
+    "e2e": "pytest tests/e2e/",
+    "typecheck": "mypy src/",
+    "lint": "ruff check src/"
+  },
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Initialize Python project structure with pyproject.toml",
+      "description": "As a bot developer, I want a proper Python project skeleton so that dependencies are managed and the package is installable",
+      "storyType": "infra",
+      "acceptanceCriteria": [
+        "pyproject.toml exists with project name claude-code-bot and Python >=3.11",
+        "Dependencies include: fastapi, uvicorn, aiogram, pydantic, pyyaml, claude-agent-sdk, structlog",
+        "Dev dependencies include: pytest, httpx, mypy, ruff",
+        "src/claude_code_bot/ package directory exists with __init__.py",
+        "src/claude_code_bot/__main__.py exists as entry point",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "test -f pyproject.toml && echo 'exists'", "expect": "contains:exists" },
+        { "command": "test -f src/claude_code_bot/__init__.py && echo 'exists'", "expect": "contains:exists" },
+        { "command": "test -f src/claude_code_bot/__main__.py && echo 'exists'", "expect": "contains:exists" },
+        { "command": "pip install -e '.[dev]'", "expect": "exit_code:0" },
+        { "command": "mypy src/", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 1,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": [],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create Pydantic config models and YAML loader",
+      "description": "As a bot developer, I want to define my bot's persona, channels, and settings in a YAML file validated by Pydantic so that I can configure behavior without writing Python code",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "Pydantic models defined: BotConfig, PersonaConfig (name, system_prompt, tone, constraints, greeting, fallback_message), ChannelConfig (type: http|telegram, settings dict), MemoryConfig (backend, path), SubAgentConfig (import_path, description, timeout), ApiKeysConfig (anthropic_api_key, telegram_bot_token)",
+        "YAML file at configurable path (default config.yaml) is loaded and validated at startup",
+        "Missing required fields produce Pydantic ValidationError naming the field and expected type",
+        "Missing YAML file produces clear 'Config file not found: <path>' error",
+        "Environment variables override YAML values (ANTHROPIC_API_KEY overrides api_keys.anthropic_api_key, TELEGRAM_BOT_TOKEN overrides api_keys.telegram_bot_token)",
+        "A config.example.yaml is provided with all fields documented",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k config -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.config import load_config; print('import ok')\"", "expect": "contains:import ok" }
+      ],
+      "status": "pending",
+      "priority": 2,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Write unit tests for valid config, missing fields, missing file, and env var override",
+      "blockedBy": ["US-001"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create FastAPI app with health check endpoint",
+      "description": "As a bot developer, I want a /health endpoint so that I can verify the bot is running and integrate with uptime monitors",
+      "storyType": "api",
+      "acceptanceCriteria": [
+        "GET /health returns HTTP 200 with JSON body {\"status\": \"ok\"}",
+        "The endpoint requires no authentication",
+        "FastAPI app starts on http://localhost:8000 by default (port configurable via YAML or env var)",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k health -v", "expect": "exit_code:0" },
+        { "command": "timeout 5 bash -c 'python -m claude_code_bot &>/dev/null & sleep 2 && curl -s http://localhost:8000/health && kill %1' 2>/dev/null || true", "expect": "contains:ok" }
+      ],
+      "status": "pending",
+      "priority": 3,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-002"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Add structured JSON startup logging",
+      "description": "As a bot developer, I want structured JSON logs on startup so that I can confirm which channels and features are active",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "On successful boot, a JSON log line is emitted containing: loaded config path, active channels, persona name",
+        "Log output goes to stdout",
+        "Log level is configurable via YAML or env var (default: INFO)",
+        "structlog is configured with JSON renderer",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k logging -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.logging import setup_logging; setup_logging(); print('ok')\"", "expect": "contains:ok" }
+      ],
+      "status": "pending",
+      "priority": 4,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-003"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Implement per-user conversation memory store",
+      "description": "As an end user, I want the bot to remember our previous conversation so that I don't have to repeat context",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "MemoryBackend abstract base class with methods: load(user_id) -> list[Message], save(user_id, messages), clear(user_id)",
+        "JsonFileMemoryBackend stores one JSON file per user_id in configurable directory (default: data/)",
+        "Memory directory is created automatically if it does not exist",
+        "Each message has role (user/assistant), content, and timestamp",
+        "Separate conversation history per user_id",
+        "History survives process restart (verified by test)",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k memory -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.memory import JsonFileMemoryBackend; print('import ok')\"", "expect": "contains:import ok" }
+      ],
+      "status": "pending",
+      "priority": 5,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Tests should verify persistence across save/load cycles",
+      "blockedBy": ["US-002"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement memory graceful degradation",
+      "description": "As an end user, I want the bot to still respond even if memory storage fails so that a disk error does not break the conversation",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "If writing to the memory store raises an I/O error, the bot still returns the LLM response to the user",
+        "Memory failure is logged as a structured JSON warning",
+        "If memory file is unreadable on next turn, bot starts a fresh conversation context (no crash)",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'memory and (fail or degrad or error)' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 6,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-005"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement conversation history truncation",
+      "description": "As a bot developer, I want long conversations to be truncated before sending to the LLM so that context window limits are not exceeded",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "Before each LLM call, conversation history is truncated to fit within configurable max token budget (default: 80% of model context window)",
+        "Truncation removes oldest messages first, always preserving system prompt and most recent N messages",
+        "Structured JSON log line emitted when truncation occurs, stating how many messages were removed",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k truncat -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 7,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Use character-based approximation or tiktoken for token counting",
+      "blockedBy": ["US-005"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Integrate claude-agent-sdk for main agent with persona",
+      "description": "As a bot developer, I want the bot to respond consistently with the configured persona so that end users get the intended experience",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "claude-agent-sdk is used to generate responses",
+        "persona.system_prompt from YAML is passed as system prompt on every request",
+        "persona.name is available for use in responses",
+        "persona.constraints list is appended to the system prompt as behavioral rules",
+        "SDK calls are wrapped behind a thin abstraction layer (AgentService class) to mitigate API changes",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k agent -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.agent import AgentService; print('import ok')\"", "expect": "contains:import ok" }
+      ],
+      "status": "pending",
+      "priority": 8,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Mock claude-agent-sdk in tests to avoid API costs",
+      "blockedBy": ["US-002", "US-005", "US-007"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Implement LLM error retry and fallback",
+      "description": "As an end user, I want to receive a friendly message when the LLM is unavailable so that I am not left with a cryptic error",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "If claude-agent-sdk call fails (timeout, 5xx, rate limit), framework retries up to 3 times with exponential backoff",
+        "After all retries fail, bot returns configurable fallback message (default: \"I'm having trouble thinking right now. Try again in a moment.\")",
+        "Fallback message is configurable via persona.fallback_message in YAML",
+        "Each failure is logged as structured JSON error with exception type and attempt number",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'retry or fallback' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 9,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-008"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Implement POST /chat HTTP endpoint",
+      "description": "As an HTTP end user, I want to send a message and receive a response so that I can converse with the bot",
+      "storyType": "api",
+      "acceptanceCriteria": [
+        "POST /chat accepts JSON body {\"user_id\": \"string\", \"message\": \"string\"}",
+        "Returns JSON {\"response\": \"string\"} with the bot's reply",
+        "Response is generated by claude-agent-sdk using persona's system_prompt",
+        "If message is empty string, bot returns persona-appropriate 'I didn't catch that' response",
+        "If user_id is not previously seen, a new conversation context is created automatically",
+        "Conversation history is loaded from memory and included in LLM call",
+        "Response and user message are saved to memory",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k chat -v", "expect": "exit_code:0" },
+        { "command": "pytest tests/e2e/ -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 10,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Use httpx TestClient for integration tests with mocked LLM",
+      "blockedBy": ["US-003", "US-008"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Add optional HTTP API key authentication",
+      "description": "As a bot developer, I want to optionally require an API key for the HTTP channel so that I can restrict access in non-local deployments",
+      "storyType": "api",
+      "acceptanceCriteria": [
+        "If channels[http].api_key is set in config, requests to /chat without matching X-API-Key header return HTTP 401 with {\"error\": \"Unauthorized\"}",
+        "If channels[http].api_key is not set, /chat is open (no auth required)",
+        "/health never requires authentication regardless of config",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'auth or api_key' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 11,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-010"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Implement sub-agent base class and registry",
+      "description": "As a bot developer, I want to register custom sub-agents with the framework so that the main agent can delegate specialized tasks",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "BaseSubAgent abstract class with: name: str, description: str, async def handle(self, context: dict) -> str",
+        "SubAgentRegistry class with register(agent), list() -> list of names/descriptions, get(name) -> agent",
+        "Sub-agents registerable via YAML config (import_path) or programmatically via registry.register(instance)",
+        "On startup, configured sub-agents are loaded and registered; import failures produce clear error naming the failing agent",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'sub_agent or registry' -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.agents import BaseSubAgent, SubAgentRegistry; print('import ok')\"", "expect": "contains:import ok" }
+      ],
+      "status": "pending",
+      "priority": 12,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-002"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Wire sub-agents as tools in main agent",
+      "description": "As an end user, I want the bot to use specialized capabilities when needed so that I get accurate, task-specific results",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "Main agent's system prompt includes description of each registered sub-agent and when to use them",
+        "Each sub-agent is exposed as a tool via claude-agent-sdk tool use",
+        "Sub-agent handle() receives context dict with: user_id, channel, query, conversation_summary",
+        "Sub-agent's string result is returned to main agent for incorporation into final response",
+        "If sub-agent raises exception or times out (configurable, default 30s), main agent receives error message and responds gracefully",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'delegat or tool' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 13,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Mock claude-agent-sdk tool use in tests",
+      "blockedBy": ["US-008", "US-012"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Implement Telegram channel adapter",
+      "description": "As a Telegram end user, I want to message the bot and receive a reply so that I can chat with it on Telegram",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "When telegram is listed in channels config with valid bot_token, bot connects to Telegram on startup",
+        "Bot receives text DMs via aiogram and responds with persona's reply",
+        "Telegram chat.id is used as user_id for memory",
+        "Default connection mode is long-polling (no webhook setup required)",
+        "If Telegram bot token is invalid, startup fails with clear error: 'Invalid Telegram bot token'",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k telegram -v", "expect": "exit_code:0" },
+        { "command": "python -c \"from claude_code_bot.channels.telegram import TelegramChannel; print('import ok')\"", "expect": "contains:import ok" }
+      ],
+      "status": "pending",
+      "priority": 14,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "Mock aiogram in tests; test Telegram adapter in isolation",
+      "blockedBy": ["US-008"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add Telegram /start greeting for new users",
+      "description": "As a Telegram end user, I want to receive an introduction when I first message the bot so that I know what it does",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "On /start command, bot sends a greeting message",
+        "If persona.greeting is configured in YAML, that text is used; otherwise bot generates organic introduction via LLM",
+        "Greeting is sent only once per user (tracked via memory store)",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'greeting or start' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 15,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-014"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Implement proactive messaging on Telegram",
+      "description": "As a bot developer, I want the bot to send messages to users without a prior trigger so that it can deliver reminders, follow-ups, or notifications",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "Framework exposes internal API send_proactive_message(user_id, message) callable from sub-agents or scheduled tasks",
+        "Message is delivered to user's Telegram chat",
+        "If user has never interacted with bot (no chat_id on record), call raises UserNotReachableError and logs warning",
+        "Proactive messages are persisted in conversation memory as assistant messages",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k proactive -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 16,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-014"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Wire sub-agent proactive message callback",
+      "description": "As a bot developer, I want a sub-agent to be able to trigger a proactive message so that background tasks can notify users of results",
+      "storyType": "backend",
+      "acceptanceCriteria": [
+        "Sub-agent handle() context includes a send_proactive callback function",
+        "Calling send_proactive(user_id, message) from within a sub-agent delivers message via Telegram channel",
+        "If Telegram is not configured, the call is a no-op and logs a warning",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "pytest tests/ -k 'sub_agent and proactive' -v", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 17,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-013", "US-016"],
+      "docsToUpdate": [],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Create Dockerfile for the bot",
+      "description": "As a bot developer, I want to build and run the bot via Docker so that deployment is reproducible and requires no local Python setup",
+      "storyType": "infra",
+      "acceptanceCriteria": [
+        "docker build -t claude-code-bot . succeeds and produces a working image",
+        "Dockerfile uses Python 3.11+ base image, installs dependencies from pyproject.toml",
+        "Image runs the bot with python -m claude_code_bot as default command",
+        "Config file is mountable via volume (default path: /app/config.yaml)",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "docker build -t claude-code-bot .", "expect": "exit_code:0" },
+        { "command": "docker run --rm claude-code-bot python -c \"import claude_code_bot; print('ok')\"", "expect": "contains:ok" }
+      ],
+      "status": "pending",
+      "priority": 18,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-010"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Create docker-compose.yml and .env.example",
+      "description": "As a bot developer, I want docker compose up to start the bot with all configuration so that I can deploy with one command",
+      "storyType": "infra",
+      "acceptanceCriteria": [
+        "docker-compose.yml at project root defines single service 'bot' building from local Dockerfile",
+        "Environment variables for secrets (ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN) read from .env file",
+        "Config YAML and data directory mounted as volumes for persistence",
+        "docker compose up starts the bot; docker compose down stops it cleanly",
+        ".env.example file documents all required and optional environment variables",
+        "Typecheck passes"
+      ],
+      "verificationCommands": [
+        { "command": "mypy src/", "expect": "exit_code:0" },
+        { "command": "test -f docker-compose.yml && echo 'exists'", "expect": "contains:exists" },
+        { "command": "test -f .env.example && echo 'exists'", "expect": "contains:exists" },
+        { "command": "docker compose config", "expect": "exit_code:0" }
+      ],
+      "status": "pending",
+      "priority": 19,
+      "attempts": 0,
+      "maxAttempts": 3,
+      "notes": "",
+      "blockedBy": ["US-018"],
+      "docsToUpdate": ["README.md"],
+      "completedAt": null,
+      "lastAttemptLog": ""
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# Claude Code Bot Configuration
+# Copy this to config.yaml and customize.
+
+persona:
+  name: "MyBot"
+  system_prompt: "You are a helpful assistant named MyBot."
+  tone: "friendly"
+  constraints:
+    - "Be concise"
+    - "Stay on topic"
+  greeting: "Hello! I'm MyBot. How can I help you today?"
+  fallback_message: "I'm having trouble thinking right now. Try again in a moment."
+
+channels:
+  - type: http
+    settings:
+      # Optional API key for HTTP channel authentication
+      # api_key: "your-secret-key"
+  - type: telegram
+    settings: {}
+
+memory:
+  backend: json_file
+  path: data/
+
+agents: {}
+  # example_agent:
+  #   import_path: "my_agents.ExampleAgent"
+  #   description: "Handles example tasks"
+  #   timeout: 30
+
+api_keys:
+  # These can also be set via environment variables:
+  # ANTHROPIC_API_KEY and TELEGRAM_BOT_TOKEN
+  anthropic_api_key: ""
+  telegram_bot_token: ""
+
+log_level: INFO
+port: 8000
