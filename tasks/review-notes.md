@@ -1,16 +1,16 @@
-## US-101: Replace memory.py with ConversationStore
-- **Date:** 2026-01-31T22:00:00Z
+# Ralph Review Notes
+
+## US-102: Create conversation management MCP tools
+- **Date:** 2026-01-31T23:00:00Z
 - **Additional test ideas:**
-  - Concurrent writes to same user file (race condition on read-modify-write)
-  - Large number of conversations per user (performance of linear scan in get/delete)
-  - Unicode in conversation names and user IDs
+  - Edge case: what happens when switch_conversation is called with empty string?
+  - Missing: no concurrency test (two tools modifying same user's file simultaneously)
+  - Could test that list_conversations returns items sorted by last_active
 - **Potential issues to watch:**
-  - ConversationStore uses synchronous file I/O (read_text/write_text) — fine for now but may need async if high concurrency
-  - No file locking — concurrent processes could corrupt JSON
-  - MemoryConfig still in BotConfig (config.py) — unused but harmless until US-107
+  - The switch_conversation tool only confirms the conversation exists — the actual "switching" logic will be in AgentService (US-103). The tool is a signal, not a state change.
+  - Tool input_schema uses simple `{"name": str}` — the SDK may or may not enforce required vs optional. `create_conversation` treats missing `name` as None which works, but verify SDK behavior.
 - **Suggestions for user:**
-  - Consider adding a max conversations per user limit
-  - The safe_user_id sanitization is basic — may want to use a hash for very long IDs
+  - Consider whether `switch_conversation` should update `last_active` timestamp on the target conversation
+  - The `delete_conversation` tool doesn't warn if deleting the currently active conversation — US-103 should handle this gracefully
 - **Related areas that may need attention:**
-  - agent.py chat() no longer tracks conversation history — US-103 will restore this with streaming
-  - Telegram proactive messages no longer persist — US-106 will handle this
+  - US-103 will need to wire these tools into AgentService via `mcp_servers` option and handle the `conversation_switched` event type

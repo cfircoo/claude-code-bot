@@ -1,22 +1,24 @@
+# Ralph Test Log
+
 ## US-101: Replace memory.py with ConversationStore
 - **Date:** 2026-01-31T22:00:00Z
 - **Tests created:**
-  - `tests/test_conversation_store.py::test_create_conversation` — create with explicit name
-  - `tests/test_conversation_store.py::test_create_auto_name` — auto-generated "Conversation N" names
-  - `tests/test_conversation_store.py::test_list_conversations` — list multiple conversations
-  - `tests/test_conversation_store.py::test_list_empty` — list for unknown user
-  - `tests/test_conversation_store.py::test_get_conversation` — get by ID
-  - `tests/test_conversation_store.py::test_get_nonexistent` — get returns None for missing
-  - `tests/test_conversation_store.py::test_update_conversation` — update name and session_id
-  - `tests/test_conversation_store.py::test_update_nonexistent` — KeyError on missing
-  - `tests/test_conversation_store.py::test_delete_conversation` — delete by ID
-  - `tests/test_conversation_store.py::test_delete_nonexistent` — KeyError on missing
-  - `tests/test_conversation_store.py::test_safe_user_id` — / and .. sanitized
-  - `tests/test_conversation_store.py::test_persistence` — data survives new instance
-  - `tests/test_conversation_store.py::test_dir_auto_created` — nested dirs created
+  - `tests/test_conversation_store.py` — 13 tests for ConversationStore CRUD, auto-name, safe ID, persistence, dir creation
 - **Tests modified:**
-  - `tests/test_agent.py` — rewritten to use ConversationStore, removed truncate/history tests
-  - `tests/test_telegram.py::test_proactive_message_persists_to_memory` → renamed to `test_proactive_message_sends_without_persistence`
-- **Tests removed:**
-  - `tests/test_memory.py` — old MemoryBackend tests
-- **Coverage notes:** All ConversationStore CRUD operations covered
+  - `tests/test_agent.py` — rewritten for new ConversationStore-based AgentService
+- **Coverage notes:** Full coverage of ConversationStore public API
+
+## US-102: Create conversation management MCP tools
+- **Date:** 2026-01-31T23:00:00Z
+- **Tests created:**
+  - `tests/test_tools.py::TestListConversations::test_empty` — empty list returns []
+  - `tests/test_tools.py::TestListConversations::test_with_conversations` — lists conversations with id, name, last_active
+  - `tests/test_tools.py::TestCreateConversation::test_with_name` — creates with explicit name
+  - `tests/test_tools.py::TestCreateConversation::test_auto_name` — auto-generates "Conversation N"
+  - `tests/test_tools.py::TestSwitchConversation::test_existing` — switches to valid conversation
+  - `tests/test_tools.py::TestSwitchConversation::test_not_found` — returns is_error for missing conversation
+  - `tests/test_tools.py::TestDeleteConversation::test_existing` — deletes and verifies removal
+  - `tests/test_tools.py::TestDeleteConversation::test_not_found` — returns is_error for missing conversation
+  - `tests/test_tools.py::TestCreateConversationTools::test_returns_dict_config` — verifies McpSdkServerConfig shape
+  - `tests/test_tools.py::TestCreateConversationTools::test_all_tools_registered` — verifies all 4 tools present
+- **Coverage notes:** All 4 tool handlers tested for success and error paths
