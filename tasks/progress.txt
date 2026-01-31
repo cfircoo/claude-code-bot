@@ -76,3 +76,12 @@ Started: Sat Jan 31 23:50:30 IST 2026
 - Removed old US-106 TODO comment from proactive_message
 - Added ChatAction import from aiogram.enums
 - 5 new tests (streaming result, tool activity, error, conversation switch, no response), all 91 tests pass, mypy clean
+
+## US-107: Clean up old code and update config - DONE
+- Removed MemoryConfig class from config.py
+- Removed memory field from BotConfig model
+- Removed memory section from config.yaml and config.example.yaml
+- Updated test_config.py to remove assertion on config.memory.backend
+- No old test_memory.py files existed (already removed in US-101)
+- All imports reference new ConversationStore/ConversationMeta (no old MemoryBackend refs)
+- All 91 tests pass, ruff clean, mypy clean

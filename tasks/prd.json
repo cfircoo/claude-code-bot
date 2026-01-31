@@ -210,14 +210,14 @@
         { "command": "uv run mypy src/", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 7,
-      "attempts": 0,
+      "attempts": 1,
       "maxAttempts": 3,
       "notes": "Final cleanup story. Make sure nothing references old memory classes.",
       "blockedBy": ["US-104", "US-105", "US-106"],
       "docsToUpdate": [],
-      "completedAt": null,
+      "completedAt": "2026-02-01T15:00:00Z",
       "lastAttemptLog": ""
     }
   ]

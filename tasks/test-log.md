@@ -27,3 +27,9 @@
   - `tests/test_telegram.py::test_process_with_streaming_conversation_switched` — conversation switch shown
   - `tests/test_telegram.py::test_process_with_streaming_no_response` — "No response." fallback
 - **Coverage notes:** Handler integration (handle_text calling _process_with_streaming) not directly tested — would require simulating aiogram dispatch.
+
+## US-107: Clean up old code and update config
+- **Date:** 2026-02-01T15:00:00Z
+- **Tests modified:**
+  - `tests/test_config.py::test_load_config_defaults` — removed assertion on config.memory.backend (field no longer exists)
+- **Coverage notes:** No new tests needed — this was a cleanup story. Existing tests verify no regressions.

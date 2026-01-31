@@ -19,10 +19,6 @@ channels:
   - type: telegram
     settings: {}
 
-memory:
-  backend: json_file
-  path: data/
-
 agents: {}
   # example_agent:
   #   import_path: "my_agents.ExampleAgent"

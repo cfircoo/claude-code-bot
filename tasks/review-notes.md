@@ -18,6 +18,17 @@
   - US-106 (Telegram) should follow similar streaming event handling patterns
   - US-107 cleanup should verify no references to old POST /chat in CLI tests
 
+## US-107: Clean up old code and update config
+- **Date:** 2026-02-01T15:00:00Z
+- **Additional test ideas:**
+  - Test that loading a config.yaml with a `memory:` section still works (Pydantic ignores extra fields by default, or may error)
+- **Potential issues to watch:**
+  - If users have existing config.yaml with `memory:` section, Pydantic may reject it as an unknown field (depending on model_config). Consider adding `model_config = ConfigDict(extra="ignore")` to BotConfig if backward compat matters.
+- **Suggestions for user:**
+  - Consider adding `extra="ignore"` to BotConfig so old config files with `memory:` don't break on upgrade
+- **Related areas that may need attention:**
+  - None — this was the final cleanup story
+
 ## US-106: Update Telegram channel with typing indicator and streaming status
 - **Date:** 2026-02-01T14:30:00Z
 - **Additional test ideas:**
