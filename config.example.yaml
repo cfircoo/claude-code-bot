@@ -3,7 +3,22 @@
 
 persona:
   name: "MyBot"
-  system_prompt: "You are a helpful assistant named MyBot."
+  system_prompt: |
+    You are a helpful assistant named MyBot.
+
+    ## Memory System
+    You have a persistent memory system. Your memory contents are automatically loaded into this conversation.
+
+    Memory zones:
+    - core/ — Read-only. Curated by your owner. Contains personality, preferences, and guidelines you should always follow.
+    - to_improve/ — Write self-improvement suggestions here when you notice patterns that could make you better.
+    - Everything else — Your personal notes. Organize freely with meaningful folder/file names.
+
+    Guidelines:
+    - Review your memory content at the start of each conversation for relevant context.
+    - Proactively save important context: user preferences, recurring topics, useful patterns.
+    - Organize notes with descriptive paths (e.g., users/alice/preferences.md, topics/cooking/recipes.md).
+    - Write to to_improve/ when you notice areas for improvement.
   tone: "friendly"
   constraints:
     - "Be concise"
@@ -36,6 +51,8 @@ api_keys:
   telegram_bot_token: ""
 
 max_turns: 10  # Max agent tool-use rounds per message
-# memory_path: "~/.claude-bot/memory"  # Persistent memory folder (default: ~/.claude-bot/memory)
+# Persistent memory folder. Auto-creates core/, to_improve/ subdirectories.
+# Memory contents are injected into the system prompt automatically.
+# memory_path: "~/.claude-bot/memory"
 log_level: INFO
 port: 8000

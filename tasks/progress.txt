@@ -58,3 +58,11 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - Integrated into AgentService._build_system_prompt() and app.py lifespan
 - Added 13 tests covering all acceptance criteria
 - config.example.yaml updated
+
+## US-210: Memory MCP tools — BLOCKED
+- SDK ProcessTransport bug still prevents MCP tools from working
+- MemoryStore from US-209 works via system prompt injection as fallback
+
+## US-211: Update system prompt with memory instructions — DONE
+- Updated config.example.yaml system_prompt with memory system instructions
+- Instructions cover all zones, guidelines, and proactive saving
