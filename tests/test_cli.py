@@ -255,6 +255,78 @@ class TestMainArgparse:
         assert cid is None
 
 
+    def test_retry_on_read_error(self):
+        """On ReadError, should retry and show [Reconnecting...]."""
+        import httpx as httpx_mod
+
+        call_count = 0
+
+        class RetryStream:
+            def __init__(self, method, url, **kwargs):
+                nonlocal call_count
+                call_count += 1
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            @property
+            def status_code(self):
+                return 200
+
+            def iter_lines(self):
+                if call_count == 1:
+                    yield f"data: {json.dumps({'type': 'text', 'content': 'partial'})}"
+                    raise httpx_mod.ReadError("connection reset")
+                else:
+                    yield f"data: {json.dumps({'type': 'text', 'content': 'full response'})}"
+                    yield f"data: {json.dumps({'type': 'result', 'conversation_id': 'c1'})}"
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            with patch("httpx.stream", RetryStream):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        output = buf.getvalue()
+        assert "[Reconnecting...]" in output
+        assert "full response" in output
+        assert call_count == 2
+        assert cid == "c1"
+
+    def test_retry_exhausted(self):
+        """After max retries, should show final error."""
+        import httpx as httpx_mod
+
+        class AlwaysFailStream:
+            def __init__(self, method, url, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            @property
+            def status_code(self):
+                return 200
+
+            def iter_lines(self):
+                raise httpx_mod.ReadError("connection reset")
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            with patch("httpx.stream", AlwaysFailStream):
+                cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        output = buf.getvalue()
+        assert "Connection lost after 3 attempts" in output
+
+
 class TestAnsiColors:
     def test_no_ansi_codes_when_not_tty(self):
         """When stdout is not a TTY (like in tests), ANSI codes should be empty."""

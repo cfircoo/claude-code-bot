@@ -60,3 +60,13 @@
   - 0.3s delay between chunks means 10 chunks = 3s total delay
 - **Suggestions for user:**
   - Consider Markdown-aware splitting that doesn't break code fences
+
+## US-207: Add retry on connection drop during CLI streaming
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test RemoteProtocolError specifically (currently only tests ReadError)
+- **Potential issues to watch:**
+  - On retry, server starts fresh — may produce duplicate content since partial text was already displayed
+  - No backoff delay between retries
+- **Suggestions for user:**
+  - Consider adding a small delay (e.g., 1s) between retries

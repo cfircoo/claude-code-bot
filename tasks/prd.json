@@ -178,9 +178,10 @@
         { "command": "uv run ruff check agent.py", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/test_cli.py -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 7,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:50:00Z",
       "maxAttempts": 3,
       "notes": "Wrap the streaming loop in a retry. Since text is printed as it arrives, partial output is already visible. On retry, the server starts fresh so there may be duplicate content — acceptable tradeoff.",
       "blockedBy": ["US-203"],

@@ -85,87 +85,99 @@ def send_streaming(
         "conversation_id": conversation_id,
     }
 
-    if debug:
-        print(f"[request] POST {base_url}/chat/stream")
-        print(f"[payload] {json.dumps(payload)}")
+    max_retries = 2
+    received_conversation_id: str | None = None
 
-    try:
-        with httpx.stream(
-            "POST",
-            f"{base_url}/chat/stream",
-            json=payload,
-            headers=headers or {},
-            timeout=httpx.Timeout(connect=10, read=300, write=10, pool=10),
-        ) as response:
-            if response.status_code != 200:
-                response.read()
-                print(f"Error ({response.status_code}): {response.text}\n")
-                return
+    for attempt in range(max_retries + 1):
+        if debug:
+            print(f"[request] POST {base_url}/chat/stream (attempt {attempt + 1})")
+            print(f"[payload] {json.dumps(payload)}")
+        elif attempt == 0 and not debug:
+            pass  # normal first attempt, no extra output
+        # else: reconnect message already printed below
 
-            in_text = False
-            received_conversation_id: str | None = None
-            for line in response.iter_lines():
-                if not line.startswith("data: "):
-                    continue
+        try:
+            with httpx.stream(
+                "POST",
+                f"{base_url}/chat/stream",
+                json=payload,
+                headers=headers or {},
+                timeout=httpx.Timeout(connect=10, read=300, write=10, pool=10),
+            ) as response:
+                if response.status_code != 200:
+                    response.read()
+                    print(f"Error ({response.status_code}): {response.text}\n")
+                    return None
 
-                raw = line[6:]
-                try:
-                    event = json.loads(raw)
-                except json.JSONDecodeError:
+                in_text = False
+                for line in response.iter_lines():
+                    if not line.startswith("data: "):
+                        continue
+
+                    raw = line[6:]
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        if debug:
+                            print(f"[bad-json] {raw}")
+                        continue
+
                     if debug:
-                        print(f"[bad-json] {raw}")
-                    continue
+                        print(f"[event] {json.dumps(event)}")
 
-                if debug:
-                    print(f"[event] {json.dumps(event)}")
+                    event_type = event.get("type", "")
 
-                event_type = event.get("type", "")
+                    if event_type == "text":
+                        sys.stdout.write(event.get("content", ""))
+                        sys.stdout.flush()
+                        in_text = True
 
-                if event_type == "text":
-                    # Print text tokens as they arrive, no newline
-                    sys.stdout.write(event.get("content", ""))
-                    sys.stdout.flush()
-                    in_text = True
+                    elif event_type == "tool_start":
+                        if in_text:
+                            print()
+                            in_text = False
+                        tool = event.get("tool", "unknown")
+                        parent = event.get("parent_tool_use_id")
+                        prefix = "  ↳ " if parent else ""
+                        print(f"{DIM}{prefix}[Using {tool}...]{RESET}", end="", flush=True)
 
-                elif event_type == "tool_start":
-                    if in_text:
-                        print()  # newline after text
-                        in_text = False
-                    tool = event.get("tool", "unknown")
-                    parent = event.get("parent_tool_use_id")
-                    prefix = "  ↳ " if parent else ""
-                    print(f"{DIM}{prefix}[Using {tool}...]{RESET}", end="", flush=True)
+                    elif event_type == "tool_done":
+                        print(f"{DIM} done{RESET}")
 
-                elif event_type == "tool_done":
-                    print(f"{DIM} done{RESET}")
-
-                elif event_type == "result":
-                    if in_text:
+                    elif event_type == "result":
+                        if in_text:
+                            print()
+                            in_text = False
+                        received_conversation_id = event.get("conversation_id")
                         print()
-                        in_text = False
-                    received_conversation_id = event.get("conversation_id")
+
+                    elif event_type == "error":
+                        if in_text:
+                            print()
+                            in_text = False
+                        print(f"{RED}Error: {event.get('content', 'unknown error')}{RESET}\n")
+
+                    elif event_type == "conversation_switched":
+                        if in_text:
+                            print()
+                            in_text = False
+                        cid = event.get("conversation_id", "")
+                        print(f"{CYAN}[Switched to conversation {cid}]{RESET}")
+
+                # End of stream — success
+                if in_text:
                     print()
+                return received_conversation_id
 
-                elif event_type == "error":
-                    if in_text:
-                        print()
-                        in_text = False
-                    print(f"{RED}Error: {event.get('content', 'unknown error')}{RESET}\n")
+        except httpx.ConnectError:
+            print(f"{RED}Error: Connection lost{RESET}")
+            return None
+        except (httpx.ReadError, httpx.RemoteProtocolError):
+            if attempt < max_retries:
+                print(f"\n{CYAN}[Reconnecting...]{RESET}")
+            else:
+                print(f"\n{RED}Error: Connection lost after {max_retries + 1} attempts{RESET}")
 
-                elif event_type == "conversation_switched":
-                    if in_text:
-                        print()
-                        in_text = False
-                    cid = event.get("conversation_id", "")
-                    print(f"{CYAN}[Switched to conversation {cid}]{RESET}")
-
-            # End of stream
-            if in_text:
-                print()
-            return received_conversation_id
-
-    except httpx.ConnectError:
-        print(f"{RED}Error: Connection lost{RESET}")
     return None
 
 

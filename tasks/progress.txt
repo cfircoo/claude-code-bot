@@ -38,3 +38,8 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - _process_with_streaming sends chunks with 0.3s delay between them
 - Added 7 tests covering all split scenarios
 - Pre-existing telegram test failures unchanged (3 failures)
+
+## US-207: Add retry on connection drop during CLI streaming — DONE
+- Wrapped streaming in retry loop (max 2 retries) for ReadError/RemoteProtocolError
+- Shows [Reconnecting...] on retry, final error after exhaustion
+- Added 2 tests: successful retry, exhausted retries

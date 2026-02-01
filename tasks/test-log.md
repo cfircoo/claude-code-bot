@@ -50,3 +50,10 @@
   - `tests/test_telegram.py::TestSplitMessage::test_hard_cut_no_boundary`
   - `tests/test_telegram.py::TestSplitMessage::test_each_chunk_within_limit`
 - **Coverage notes:** 18 of 21 telegram tests pass; 3 pre-existing failures
+
+## US-207: Add retry on connection drop during CLI streaming
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_cli.py::TestSendStreaming::test_retry_on_read_error` — verifies retry on ReadError with Reconnecting indicator
+  - `tests/test_cli.py::TestSendStreaming::test_retry_exhausted` — verifies error after max retries
+- **Coverage notes:** 20 of 22 CLI tests pass; 2 pre-existing failures
