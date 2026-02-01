@@ -62,6 +62,7 @@ class BotConfig(BaseModel):
     max_turns: int = 10
     log_level: str = "INFO"
     port: int = 8000
+    memory_path: str = "~/.claude-bot/memory"
 
 
 def _apply_env_overrides(config: BotConfig) -> BotConfig:

@@ -36,5 +36,6 @@ api_keys:
   telegram_bot_token: ""
 
 max_turns: 10  # Max agent tool-use rounds per message
+# memory_path: "~/.claude-bot/memory"  # Persistent memory folder (default: ~/.claude-bot/memory)
 log_level: INFO
 port: 8000

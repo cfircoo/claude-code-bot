@@ -238,9 +238,10 @@
         { "command": "uv run pytest tests/ -k memory_store -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 9,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T09:00:00Z",
       "maxAttempts": 3,
       "notes": "Use pathlib for all path operations. The memory_path in config should expand ~ via Path.expanduser(). Docker-compose should mount a host volume to ~/.claude-bot/memory/. MemoryStore is initialized in app.py lifespan and passed to AgentService.",
       "blockedBy": ["US-201"],

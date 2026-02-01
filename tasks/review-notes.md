@@ -80,3 +80,16 @@
   - edit_text can fail if message is too old or deleted — has try/except fallback
 - **Suggestions for user:**
   - Consider customizing the "Thinking..." text via channel settings
+
+## US-209: Add persistent memory system
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test memory injection into system prompt (integration test with AgentService)
+  - Test with binary files in memory folder
+  - Test with very large memory content
+- **Potential issues to watch:**
+  - load_all() includes core content, and _build_system_prompt also includes it under "Core" — causes duplication
+  - No size limit on memory content in system prompt — could exceed token limits
+- **Suggestions for user:**
+  - Consider adding a max_memory_tokens config to truncate memory content
+  - Consider docker-compose volume mount for ~/.claude-bot/memory

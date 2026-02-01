@@ -65,3 +65,9 @@
   - `tests/test_telegram.py::test_thinking_threshold_configurable`
   - `tests/test_telegram.py::test_fast_response_no_thinking_message`
 - **Coverage notes:** 21 of 24 telegram tests pass; 3 pre-existing failures
+
+## US-209: Add persistent memory system
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_memory_store.py` — 13 tests covering auto-create, write, delete, core protection, path traversal, load, list
+- **Coverage notes:** All 13 tests pass

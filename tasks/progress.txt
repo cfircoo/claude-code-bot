@@ -49,3 +49,12 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - asyncio task sends "Thinking..." after threshold, gets cancelled if response arrives first
 - If thinking was sent, first chunk edits the thinking message instead of new message
 - Added 3 tests: default threshold, configurable threshold, fast response no thinking
+
+## US-209: Add persistent memory system — DONE
+- Created src/claude_code_bot/memory_store.py with MemoryStore class
+- Auto-creates memory/core/ and memory/to_improve/ dirs
+- load_core(), load_all(), write(), delete(), list() methods with core/ protection and path traversal prevention
+- Added memory_path to BotConfig (default ~/.claude-bot/memory)
+- Integrated into AgentService._build_system_prompt() and app.py lifespan
+- Added 13 tests covering all acceptance criteria
+- config.example.yaml updated

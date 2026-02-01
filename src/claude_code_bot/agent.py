@@ -20,6 +20,7 @@ from claude_agent_sdk.types import StreamEvent
 from claude_code_bot.agents import SubAgentRegistry
 from claude_code_bot.config import BotConfig
 from claude_code_bot.memory import ConversationMeta, ConversationStore
+from claude_code_bot.memory_store import MemoryStore
 logger = structlog.get_logger()
 
 MAX_RETRIES = 3
@@ -34,10 +35,12 @@ class AgentService:
         config: BotConfig,
         store: ConversationStore,
         registry: SubAgentRegistry,
+        memory_store: MemoryStore | None = None,
     ) -> None:
         self.config = config
         self.store = store
         self.registry = registry
+        self.memory_store = memory_store
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt from persona config."""
@@ -59,6 +62,19 @@ class AgentService:
             parts.append(
                 "\nTo use a sub-agent, call the corresponding tool with a 'query' parameter."
             )
+
+        # Append memory content if available
+        if self.memory_store:
+            core = self.memory_store.load_core()
+            all_notes = self.memory_store.load_all()
+            # Remove core content from all_notes to avoid duplication
+            # all_notes includes core, so we show it structured
+            if core or all_notes:
+                parts.append("\n\n## Memory")
+                if core:
+                    parts.append(f"### Core\n{core}")
+                if all_notes:
+                    parts.append(f"### Notes\n{all_notes}")
 
         return "\n".join(parts)
 
