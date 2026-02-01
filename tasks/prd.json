@@ -102,9 +102,10 @@
         { "command": "uv run ruff check agent.py", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/test_cli.py -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 4,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:35:00Z",
       "maxAttempts": 3,
       "notes": "Use sys.stdout.isatty() check. Define ANSI constants (DIM, RED, CYAN, RESET). Wrap existing print calls.",
       "blockedBy": [],

@@ -21,3 +21,12 @@
   - `tests/test_cli.py::TestSendStreaming::test_api_key_header_sent` — verifies X-API-Key header is passed to httpx.stream
 - **Tests modified:** None
 - **Coverage notes:** 12 of 14 CLI tests pass; 2 pre-existing failures
+
+## US-204: Add ANSI color formatting to CLI
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_cli.py::TestAnsiColors::test_no_ansi_codes_when_not_tty` — verifies color constants are empty
+  - `tests/test_cli.py::TestAnsiColors::test_tool_indicator_no_ansi_in_output` — no escape codes in tool output
+  - `tests/test_cli.py::TestAnsiColors::test_error_no_ansi_in_output` — no escape codes in error output
+- **Tests modified:** None
+- **Coverage notes:** 16 of 18 tests pass; 2 pre-existing failures

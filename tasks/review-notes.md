@@ -30,3 +30,12 @@
   - API key is visible in process list (`ps aux`) — consider reading from env var as alternative
 - **Suggestions for user:**
   - Consider also supporting `CLAUDE_BOT_API_KEY` env var as alternative to CLI flag
+
+## US-204: Add ANSI color formatting to CLI
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test with mocked isatty() returning True to verify ANSI codes are present
+- **Potential issues to watch:**
+  - BOLD constant defined but not used yet — could apply to bot name in interactive mode
+- **Suggestions for user:**
+  - Consider a `--no-color` flag for users who want to force-disable colors on a TTY

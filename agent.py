@@ -9,6 +9,14 @@ import sys
 
 import httpx
 
+# ANSI color codes (disabled when stdout is not a TTY)
+_USE_COLOR = sys.stdout.isatty()
+DIM = "\033[2m" if _USE_COLOR else ""
+RED = "\033[31m" if _USE_COLOR else ""
+CYAN = "\033[36m" if _USE_COLOR else ""
+BOLD = "\033[1m" if _USE_COLOR else ""
+RESET = "\033[0m" if _USE_COLOR else ""
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chat with Claude Code Bot")
@@ -118,10 +126,10 @@ def send_streaming(
                     tool = event.get("tool", "unknown")
                     parent = event.get("parent_tool_use_id")
                     prefix = "  ↳ " if parent else ""
-                    print(f"{prefix}[Using {tool}...]", end="", flush=True)
+                    print(f"{DIM}{prefix}[Using {tool}...]{RESET}", end="", flush=True)
 
                 elif event_type == "tool_done":
-                    print(" done")
+                    print(f"{DIM} done{RESET}")
 
                 elif event_type == "result":
                     if in_text:
@@ -133,21 +141,21 @@ def send_streaming(
                     if in_text:
                         print()
                         in_text = False
-                    print(f"Error: {event.get('content', 'unknown error')}\n")
+                    print(f"{RED}Error: {event.get('content', 'unknown error')}{RESET}\n")
 
                 elif event_type == "conversation_switched":
                     if in_text:
                         print()
                         in_text = False
                     cid = event.get("conversation_id", "")
-                    print(f"[Switched to conversation {cid}]")
+                    print(f"{CYAN}[Switched to conversation {cid}]{RESET}")
 
             # End of stream
             if in_text:
                 print()
 
     except httpx.ConnectError:
-        print("Error: Connection lost")
+        print(f"{RED}Error: Connection lost{RESET}")
 
 
 if __name__ == "__main__":

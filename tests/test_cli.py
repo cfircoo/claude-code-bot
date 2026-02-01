@@ -216,12 +216,48 @@ class TestMainArgparse:
         )
         assert "--debug" in result.stdout
 
+    def test_api_key_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "agent.py", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--api-key" in result.stdout
+
     def test_interactive_flag_in_help(self):
         result = subprocess.run(
             [sys.executable, "agent.py", "--help"],
             capture_output=True, text=True,
         )
         assert "--interactive" in result.stdout
+
+
+class TestAnsiColors:
+    def test_no_ansi_codes_when_not_tty(self):
+        """When stdout is not a TTY (like in tests), ANSI codes should be empty."""
+        # Since tests redirect stdout to StringIO, _USE_COLOR should be False
+        assert cli_module._USE_COLOR is False
+        assert cli_module.DIM == ""
+        assert cli_module.RED == ""
+        assert cli_module.CYAN == ""
+        assert cli_module.RESET == ""
+
+    def test_tool_indicator_no_ansi_in_output(self):
+        """Tool indicators should not contain ANSI escape codes when not a TTY."""
+        events = [
+            {"type": "tool_start", "tool": "SearchFiles"},
+            {"type": "tool_done", "tool": "SearchFiles"},
+            {"type": "result", "content": "Done"},
+        ]
+        output = _capture_send(events)
+        assert "\033[" not in output
+        assert "[Using SearchFiles...]" in output
+
+    def test_error_no_ansi_in_output(self):
+        """Error messages should not contain ANSI codes when not a TTY."""
+        events = [{"type": "error", "content": "Something broke"}]
+        output = _capture_send(events)
+        assert "\033[" not in output
+        assert "Error: Something broke" in output
 
 
 def httpx_connect_error():
