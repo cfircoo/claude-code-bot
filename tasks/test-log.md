@@ -14,3 +14,10 @@
   - `tests/test_telegram.py::test_show_tool_activity_set_from_settings` — verifies setting can be toggled
 - **Tests modified:** None
 - **Coverage notes:** All new tests pass; 3 pre-existing failures unchanged
+
+## US-203: Add --api-key flag to CLI agent.py
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_cli.py::TestSendStreaming::test_api_key_header_sent` — verifies X-API-Key header is passed to httpx.stream
+- **Tests modified:** None
+- **Coverage notes:** 12 of 14 CLI tests pass; 2 pre-existing failures

@@ -20,3 +20,13 @@
   - The setting is set after construction via attribute assignment — a constructor param would be cleaner
 - **Suggestions for user:**
   - Consider validating channel settings keys to catch typos (e.g. `show_tool_activty`)
+
+## US-203: Add --api-key flag to CLI agent.py
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test that health check also receives the header
+  - Test interactive mode passes headers through
+- **Potential issues to watch:**
+  - API key is visible in process list (`ps aux`) — consider reading from env var as alternative
+- **Suggestions for user:**
+  - Consider also supporting `CLAUDE_BOT_API_KEY` env var as alternative to CLI flag

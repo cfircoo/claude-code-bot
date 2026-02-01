@@ -77,9 +77,10 @@
         { "command": "uv run python agent.py --help", "expect": "contains:api-key" },
         { "command": "uv run pytest tests/test_cli.py -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 3,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:30:00Z",
       "maxAttempts": 3,
       "notes": "Pass headers dict to httpx.get and httpx.stream calls. Add test that verifies header is sent when flag is provided.",
       "blockedBy": [],

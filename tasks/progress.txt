@@ -13,3 +13,9 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - config.example.yaml updated with commented-out example
 - Added 2 tests for default value and setting toggle
 - Pre-existing telegram test failures unchanged (3 failures)
+
+## US-203: Add --api-key flag to CLI agent.py — DONE
+- Added --api-key CLI argument, passes X-API-Key header to health check and streaming requests
+- send_streaming now accepts optional headers param
+- Added test_api_key_header_sent verifying header is passed through
+- Pre-existing CLI test failures unchanged (2 failures: test_text_tokens_printed_incrementally, test_bad_json_in_sse_stream)

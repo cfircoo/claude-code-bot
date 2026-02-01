@@ -170,6 +170,35 @@ class TestSendStreaming:
         assert "Bot: ok" in buf.getvalue()
 
 
+    def test_api_key_header_sent(self):
+        """When headers contain X-API-Key, it should be passed to httpx.stream."""
+        events = [{"type": "result", "content": "ok"}]
+        calls = []
+
+        original_stream = FakeStreamResponse(events)
+
+        class CapturingStream:
+            def __init__(self, method, url, **kwargs):
+                calls.append(kwargs)
+                self._inner = original_stream
+
+            def __enter__(self):
+                return self._inner
+
+            def __exit__(self, *args):
+                pass
+
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", CapturingStream):
+                cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False,
+                    headers={"X-API-Key": "my-secret"},
+                )
+
+        assert len(calls) == 1
+        assert calls[0]["headers"]["X-API-Key"] == "my-secret"
+
+
 class TestMainArgparse:
     def test_help_output(self):
         """--help should mention --conversation flag."""

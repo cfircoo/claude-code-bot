@@ -17,14 +17,18 @@ def main() -> None:
     parser.add_argument("--user", default="cli-user", help="User ID (default: cli-user)")
     parser.add_argument("--conversation", default=None, help="Conversation ID to target")
     parser.add_argument("--debug", action="store_true", help="Show raw SSE events")
+    parser.add_argument("--api-key", default=None, help="API key for X-API-Key header authentication")
     parser.add_argument("-i", "--interactive", action="store_true", help="Interactive chat mode")
     args = parser.parse_args()
 
     base_url = args.url.rstrip("/")
+    headers: dict[str, str] = {}
+    if args.api_key:
+        headers["X-API-Key"] = args.api_key
 
     # Check health first
     try:
-        r = httpx.get(f"{base_url}/health", timeout=5)
+        r = httpx.get(f"{base_url}/health", timeout=5, headers=headers)
         if args.debug:
             print(f"[health] {r.json()}")
     except httpx.ConnectError:
@@ -44,11 +48,11 @@ def main() -> None:
                     break
                 if not msg or msg.lower() in ("quit", "exit"):
                     break
-                send_streaming(base_url, args.user, msg, args.conversation, args.debug)
+                send_streaming(base_url, args.user, msg, args.conversation, args.debug, headers)
         except KeyboardInterrupt:
             print("\nBye!")
     else:
-        send_streaming(base_url, args.user, args.message, args.conversation, args.debug)
+        send_streaming(base_url, args.user, args.message, args.conversation, args.debug, headers)
 
 
 def send_streaming(
@@ -57,6 +61,7 @@ def send_streaming(
     message: str,
     conversation_id: str | None,
     debug: bool,
+    headers: dict[str, str] | None = None,
 ) -> None:
     """Send a message via POST /chat/stream and display SSE events in real-time."""
     payload: dict[str, str | None] = {
@@ -74,6 +79,7 @@ def send_streaming(
             "POST",
             f"{base_url}/chat/stream",
             json=payload,
+            headers=headers or {},
             timeout=httpx.Timeout(connect=10, read=300, write=10, pool=10),
         ) as response:
             if response.status_code != 200:
