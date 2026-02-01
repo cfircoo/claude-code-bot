@@ -231,6 +231,30 @@ class TestMainArgparse:
         assert "--interactive" in result.stdout
 
 
+    def test_send_streaming_returns_conversation_id(self):
+        """send_streaming should return conversation_id from result event."""
+        events = [
+            {"type": "text", "content": "Hi"},
+            {"type": "result", "conversation_id": "conv-xyz"},
+        ]
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", return_value=FakeStreamResponse(events)):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        assert cid == "conv-xyz"
+
+    def test_send_streaming_returns_none_without_conversation_id(self):
+        """send_streaming returns None when no result event has conversation_id."""
+        events = [{"type": "text", "content": "Hi"}]
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", return_value=FakeStreamResponse(events)):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        assert cid is None
+
+
 class TestAnsiColors:
     def test_no_ansi_codes_when_not_tty(self):
         """When stdout is not a TTY (like in tests), ANSI codes should be empty."""

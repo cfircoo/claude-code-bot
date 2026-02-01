@@ -99,7 +99,7 @@ class AgentService:
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             include_partial_messages=True,
-            max_turns=1,
+            max_turns=self.config.max_turns,
         )
 
         if meta.session_id:
@@ -160,6 +160,7 @@ class AgentService:
                 yield {
                     "type": "result",
                     "session_id": session_id or "",
+                    "conversation_id": meta.conversation_id,
                 }
                 return
 

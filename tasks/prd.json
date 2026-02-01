@@ -126,9 +126,10 @@
         { "command": "uv run ruff check agent.py", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/test_cli.py -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 5,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:40:00Z",
       "maxAttempts": 3,
       "notes": "The SSE result event already includes session_id. Need to also return conversation_id from the SSE endpoint. Update send_streaming to return the conversation_id, then persist it in the interactive loop.",
       "blockedBy": ["US-203"],

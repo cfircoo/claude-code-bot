@@ -45,8 +45,9 @@ def main() -> None:
 
     if args.interactive or args.message is None:
         print(f"Connected to {base_url} as '{args.user}'")
-        if args.conversation:
-            print(f"Conversation: {args.conversation}")
+        conversation_id = args.conversation
+        if conversation_id:
+            print(f"Conversation: {conversation_id}")
         print("Type 'quit' or Ctrl+C to exit.\n")
         try:
             while True:
@@ -56,7 +57,10 @@ def main() -> None:
                     break
                 if not msg or msg.lower() in ("quit", "exit"):
                     break
-                send_streaming(base_url, args.user, msg, args.conversation, args.debug, headers)
+                cid = send_streaming(base_url, args.user, msg, conversation_id, args.debug, headers)
+                if cid and not conversation_id:
+                    conversation_id = cid
+                    print(f"{DIM}[Conversation: {conversation_id}]{RESET}")
         except KeyboardInterrupt:
             print("\nBye!")
     else:
@@ -70,8 +74,11 @@ def send_streaming(
     conversation_id: str | None,
     debug: bool,
     headers: dict[str, str] | None = None,
-) -> None:
-    """Send a message via POST /chat/stream and display SSE events in real-time."""
+) -> str | None:
+    """Send a message via POST /chat/stream and display SSE events in real-time.
+
+    Returns the conversation_id from the result event, if present.
+    """
     payload: dict[str, str | None] = {
         "user_id": user_id,
         "message": message,
@@ -96,6 +103,7 @@ def send_streaming(
                 return
 
             in_text = False
+            received_conversation_id: str | None = None
             for line in response.iter_lines():
                 if not line.startswith("data: "):
                     continue
@@ -135,6 +143,7 @@ def send_streaming(
                     if in_text:
                         print()
                         in_text = False
+                    received_conversation_id = event.get("conversation_id")
                     print()
 
                 elif event_type == "error":
@@ -153,9 +162,11 @@ def send_streaming(
             # End of stream
             if in_text:
                 print()
+            return received_conversation_id
 
     except httpx.ConnectError:
         print(f"{RED}Error: Connection lost{RESET}")
+    return None
 
 
 if __name__ == "__main__":

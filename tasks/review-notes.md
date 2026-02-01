@@ -39,3 +39,13 @@
   - BOLD constant defined but not used yet — could apply to bot name in interactive mode
 - **Suggestions for user:**
   - Consider a `--no-color` flag for users who want to force-disable colors on a TTY
+
+## US-205: Persist conversation_id in CLI interactive mode
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Integration test of interactive loop with mocked input/output
+  - Test that --conversation flag takes precedence over auto-detected ID
+- **Potential issues to watch:**
+  - If server errors on first message, conversation_id stays None — subsequent messages create new conversations each time
+- **Suggestions for user:**
+  - Consider showing conversation name alongside ID

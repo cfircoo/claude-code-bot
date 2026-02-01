@@ -30,3 +30,11 @@
   - `tests/test_cli.py::TestAnsiColors::test_error_no_ansi_in_output` — no escape codes in error output
 - **Tests modified:** None
 - **Coverage notes:** 16 of 18 tests pass; 2 pre-existing failures
+
+## US-205: Persist conversation_id in CLI interactive mode
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_cli.py::TestSendStreaming::test_send_streaming_returns_conversation_id`
+  - `tests/test_cli.py::TestSendStreaming::test_send_streaming_returns_none_without_conversation_id`
+- **Tests modified:** None
+- **Coverage notes:** 18 of 20 tests pass; 2 pre-existing failures
