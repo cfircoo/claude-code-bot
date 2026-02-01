@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PersonaConfig(BaseModel):
@@ -53,10 +53,13 @@ class ApiKeysConfig(BaseModel):
 class BotConfig(BaseModel):
     """Root bot configuration."""
 
+    model_config = ConfigDict(extra="ignore")
+
     persona: PersonaConfig = Field(default_factory=PersonaConfig)
     channels: list[ChannelConfig] = Field(default_factory=list)
     agents: dict[str, SubAgentConfig] = Field(default_factory=dict)
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
+    max_turns: int = 10
     log_level: str = "INFO"
     port: int = 8000
 

@@ -79,6 +79,15 @@ def test_persona_config_defaults() -> None:
     assert persona.greeting is None
 
 
+def test_bot_config_extra_fields_ignored(tmp_path: Path) -> None:
+    """Extra/unknown keys in config.yaml should not cause ValidationError."""
+    path = tmp_path / "config.yaml"
+    with open(path, "w") as f:
+        yaml.dump({"memory": {"enabled": True}, "unknown_section": "value"}, f)
+    config = load_config(str(path))
+    assert config.persona.name == "Assistant"  # defaults still work
+
+
 def test_bot_config_model_validation() -> None:
     config = BotConfig(
         persona=PersonaConfig(name="Test"),
