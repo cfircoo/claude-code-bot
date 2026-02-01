@@ -71,3 +71,18 @@
 - **Tests created:**
   - `tests/test_memory_store.py` — 13 tests covering auto-create, write, delete, core protection, path traversal, load, list
 - **Coverage notes:** All 13 tests pass
+
+## US-212: Add permission_mode and allowed_tools to config
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_config.py::test_permission_mode_defaults`
+  - `tests/test_config.py::test_permission_mode_valid_values`
+  - `tests/test_config.py::test_permission_mode_invalid`
+  - `tests/test_config.py::test_allowed_tools_from_config`
+- **Coverage notes:** 12 config tests pass
+
+## US-213: Add interactive tool permission via can_use_tool
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_permissions.py` — 12 tests covering summarize, approval flows, timeout, deny, no notifier
+- **Coverage notes:** All 12 permission tests pass

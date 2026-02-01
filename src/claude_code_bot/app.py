@@ -19,6 +19,7 @@ from claude_code_bot.config import BotConfig, load_config
 from claude_code_bot.logging import setup_logging
 from claude_code_bot.memory import ConversationStore
 from claude_code_bot.memory_store import MemoryStore
+from claude_code_bot.permissions import PermissionManager
 
 logger = structlog.get_logger()
 
@@ -27,6 +28,7 @@ _agent_service: AgentService | None = None
 _config: BotConfig | None = None
 _telegram: TelegramChannel | None = None
 _store: ConversationStore | None = None
+_permission_manager: PermissionManager | None = None
 
 
 class ChatStreamRequest(BaseModel):
@@ -86,8 +88,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         registry = SubAgentRegistry()
 
     _memory_store = MemoryStore(memory_path=_config.memory_path)
+    global _permission_manager
+    _permission_manager = PermissionManager(
+        tools_requiring_approval=_config.tools_requiring_approval,
+    )
     _agent_service = AgentService(
-        config=_config, store=_store, registry=registry, memory_store=_memory_store
+        config=_config,
+        store=_store,
+        registry=registry,
+        memory_store=_memory_store,
+        permission_manager=_permission_manager,
     )
 
     # Start Telegram if configured
@@ -104,6 +114,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
         _telegram.thinking_threshold = float(tg_settings.get("thinking_threshold", 10.0))
+        if _permission_manager:
+            _telegram.set_permission_manager(_permission_manager)
         _telegram.set_agent_service(_agent_service)
         telegram_task = asyncio.create_task(_telegram.start_polling())
 
@@ -205,6 +217,20 @@ async def delete_conversation(user_id: str, conversation_id: str) -> dict[str, s
     except KeyError:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "deleted"}
+
+
+class PermissionResponse(BaseModel):
+    approved: bool
+
+
+@app.post("/permissions/{request_id}")
+async def resolve_permission(request_id: str, body: PermissionResponse) -> dict[str, str]:
+    """Resolve a pending tool permission request."""
+    if _permission_manager is None:
+        raise HTTPException(status_code=503, detail="Permission manager not initialized")
+    if not _permission_manager.resolve(request_id, body.approved):
+        raise HTTPException(status_code=404, detail="Permission request not found")
+    return {"status": "resolved"}
 
 
 @app.post("/proactive")

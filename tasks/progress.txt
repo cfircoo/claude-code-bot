@@ -72,3 +72,10 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - Passed through to ClaudeAgentOptions in chat_stream
 - Added 4 tests: defaults, valid values, invalid value rejection, config loading
 - config.example.yaml updated
+
+## US-213: Add interactive tool permission via can_use_tool — DONE
+- Created src/claude_code_bot/permissions.py with PermissionManager
+- POST /permissions/{request_id} HTTP endpoint
+- Telegram inline keyboard callback handler
+- Added tools_requiring_approval to BotConfig (default ["Bash"])
+- 12 tests covering all flows

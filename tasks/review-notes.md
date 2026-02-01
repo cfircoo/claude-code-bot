@@ -93,3 +93,20 @@
 - **Suggestions for user:**
   - Consider adding a max_memory_tokens config to truncate memory content
   - Consider docker-compose volume mount for ~/.claude-bot/memory
+
+## US-212: Add permission_mode and allowed_tools to config
+- **Date:** 2026-02-01
+- **Suggestions for user:**
+  - Consider using `bypassPermissions` only in development; `acceptEdits` is safer for production
+
+## US-213: Add interactive tool permission via can_use_tool
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Integration test with real Telegram callback query mock
+  - Test concurrent permission requests
+- **Potential issues to watch:**
+  - Only one notifier can be set at a time — if both HTTP and Telegram are active, only the last one gets prompts
+  - Telegram sends prompt to ALL known chat IDs — could be noisy with multiple users
+- **Suggestions for user:**
+  - Consider per-user notifier routing (match user_id to their active channel)
+  - Consider persistent permission grants ("always allow Read")

@@ -9,11 +9,13 @@ import structlog
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ChatAction
 from aiogram.filters import Command
-from aiogram.types import Message as TelegramMessage
+from aiogram.types import CallbackQuery, Message as TelegramMessage
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 if TYPE_CHECKING:
     from claude_code_bot.agent import AgentService
     from claude_code_bot.config import BotConfig
+    from claude_code_bot.permissions import PermissionManager
 
 logger = structlog.get_logger()
 
@@ -72,12 +74,43 @@ class TelegramChannel:
         self._greeted_users: set[int] = set()
         self.show_tool_activity: bool = False
         self.thinking_threshold: float = 10.0
+        self._permission_manager: PermissionManager | None = None
 
         self._register_handlers()
 
     def set_agent_service(self, agent_service: AgentService) -> None:
         """Set the agent service for processing messages."""
         self._agent_service = agent_service
+
+    def set_permission_manager(self, manager: PermissionManager) -> None:
+        """Set the permission manager and register as notifier."""
+        self._permission_manager = manager
+        manager.set_notifier(self._send_permission_prompt)
+
+    async def _send_permission_prompt(
+        self, request_id: str, tool_name: str, summary: str
+    ) -> None:
+        """Send an inline keyboard permission prompt to all known chats."""
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Yes", callback_data=f"perm:yes:{request_id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ No", callback_data=f"perm:no:{request_id}"
+                    ),
+                ]
+            ]
+        )
+        text = f"Allow {tool_name}?\n{summary}"
+        for chat_id in self._known_chat_ids:
+            try:
+                await self.bot.send_message(
+                    chat_id=chat_id, text=text, reply_markup=keyboard
+                )
+            except Exception:
+                pass
 
     async def _send_typing_loop(self, chat_id: int, stop_event: asyncio.Event) -> None:
         """Send typing action periodically until stop_event is set."""
@@ -193,6 +226,27 @@ class TelegramChannel:
                 return
 
             await self._process_with_streaming(chat_id, message.text, message)
+
+        @self.dp.callback_query(F.data.startswith("perm:"))
+        async def handle_permission_callback(callback: CallbackQuery) -> None:
+            if callback.data is None:
+                return
+            parts = callback.data.split(":", 2)
+            if len(parts) != 3:
+                return
+            _, decision, request_id = parts
+            approved = decision == "yes"
+            if self._permission_manager:
+                self._permission_manager.resolve(request_id, approved)
+            status = "Approved" if approved else "Denied"
+            await callback.answer(status)
+            if callback.message:
+                try:
+                    await callback.message.edit_text(  # type: ignore[union-attr]
+                        f"{callback.message.text}\n\n→ {status}"  # type: ignore[union-attr]
+                    )
+                except Exception:
+                    pass
 
     async def send_proactive_message(self, user_id: str, text: str) -> None:
         """Send a message to a user without a prior trigger.

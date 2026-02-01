@@ -355,9 +355,10 @@
         { "command": "uv run pytest tests/ -k permissions -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 13,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T09:15:00Z",
       "maxAttempts": 3,
       "notes": "This is the most complex story. Key design: PermissionManager holds a dict of pending requests (request_id -> asyncio.Event + result). The can_use_tool callback creates a request, notifies the channel, then awaits the event. The channel handler (HTTP endpoint or Telegram callback) sets the event. For HTTP: the SSE stream pauses while waiting; client sees the permission_request event and sends approval via REST. For Telegram: inline keyboard with approve/deny buttons. Use uuid4 for request_id. Important: the can_use_tool callback runs inside the SDK's event loop, so it must be async and non-blocking (just awaiting the Event is fine).",
       "blockedBy": ["US-212"],

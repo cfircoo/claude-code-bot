@@ -66,6 +66,7 @@ class BotConfig(BaseModel):
     permission_mode: Literal["default", "acceptEdits", "plan", "bypassPermissions"] = "acceptEdits"
     allowed_tools: list[str] = Field(default_factory=list)
     disallowed_tools: list[str] = Field(default_factory=list)
+    tools_requiring_approval: list[str] = Field(default_factory=lambda: ["Bash"])
 
 
 def _apply_env_overrides(config: BotConfig) -> BotConfig:
