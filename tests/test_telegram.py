@@ -285,6 +285,49 @@ def test_show_tool_activity_default_false(config: BotConfig) -> None:
         assert channel.show_tool_activity is False
 
 
+def test_thinking_threshold_default(config: BotConfig) -> None:
+    """thinking_threshold defaults to 10.0."""
+    with patch("claude_code_bot.channels.telegram.Bot"):
+        channel = TelegramChannel(bot_token="123:ABC", config=config)
+        assert channel.thinking_threshold == 10.0
+
+
+def test_thinking_threshold_configurable(config: BotConfig) -> None:
+    """thinking_threshold can be changed."""
+    with patch("claude_code_bot.channels.telegram.Bot"):
+        channel = TelegramChannel(bot_token="123:ABC", config=config)
+        channel.thinking_threshold = 5.0
+        assert channel.thinking_threshold == 5.0
+
+
+@pytest.mark.asyncio
+async def test_fast_response_no_thinking_message(config: BotConfig) -> None:
+    """Fast responses should not send a thinking message."""
+    with patch("claude_code_bot.channels.telegram.Bot") as MockBot:
+        mock_bot = MockBot.return_value
+        mock_bot.send_chat_action = AsyncMock()
+
+        channel = TelegramChannel(bot_token="123:ABC", config=config)
+        channel.thinking_threshold = 100.0  # very high — won't trigger
+
+        mock_agent = MagicMock()
+
+        async def fake_stream(user_id: str, message: str, conversation_id: str | None = None):
+            yield {"type": "text", "content": "Quick reply"}
+
+        mock_agent.chat_stream = fake_stream
+        channel.set_agent_service(mock_agent)
+
+        mock_message = AsyncMock()
+        mock_message.chat = MagicMock()
+        mock_message.chat.id = 123
+
+        await channel._process_with_streaming(123, "hi", mock_message)
+
+        # Should call answer directly (not edit_text)
+        mock_message.answer.assert_called_once_with("Quick reply")
+
+
 def test_show_tool_activity_set_from_settings(config: BotConfig) -> None:
     """show_tool_activity can be toggled externally (as app.py does from config)."""
     with patch("claude_code_bot.channels.telegram.Bot"):

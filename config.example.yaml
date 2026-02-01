@@ -20,6 +20,8 @@ channels:
     settings:
       # Show tool usage indicators in responses (default: false)
       # show_tool_activity: true
+      # Send "Thinking..." message after this many seconds (default: 10)
+      # thinking_threshold: 10
 
 agents: {}
   # example_agent:

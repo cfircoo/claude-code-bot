@@ -43,3 +43,9 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - Wrapped streaming in retry loop (max 2 retries) for ReadError/RemoteProtocolError
 - Shows [Reconnecting...] on retry, final error after exhaustion
 - Added 2 tests: successful retry, exhausted retries
+
+## US-208: Add thinking indicator for long Telegram agent runs — DONE
+- Added thinking_threshold attribute (default 10s), configurable via channel settings
+- asyncio task sends "Thinking..." after threshold, gets cancelled if response arrives first
+- If thinking was sent, first chunk edits the thinking message instead of new message
+- Added 3 tests: default threshold, configurable threshold, fast response no thinking

@@ -71,6 +71,7 @@ class TelegramChannel:
         self._known_chat_ids: set[int] = set()
         self._greeted_users: set[int] = set()
         self.show_tool_activity: bool = False
+        self.thinking_threshold: float = 10.0
 
         self._register_handlers()
 
@@ -102,6 +103,17 @@ class TelegramChannel:
 
         text_parts: list[str] = []
         tool_activities: list[str] = []
+        thinking_msg: TelegramMessage | None = None
+
+        async def _send_thinking() -> None:
+            nonlocal thinking_msg
+            await asyncio.sleep(self.thinking_threshold)
+            try:
+                thinking_msg = await message.answer("Thinking...")
+            except Exception:
+                pass
+
+        thinking_task = asyncio.create_task(_send_thinking())
 
         try:
             async for event in self._agent_service.chat_stream(
@@ -119,6 +131,7 @@ class TelegramChannel:
                     cid = event.get("conversation_id", "")
                     tool_activities.append(f"Switched to conversation {cid}")
         finally:
+            thinking_task.cancel()
             stop_typing.set()
             await typing_task
 
@@ -133,8 +146,16 @@ class TelegramChannel:
 
         final = "\n\n".join(response_parts) if response_parts else "No response."
         chunks = split_message(final)
+
         for i, chunk in enumerate(chunks):
-            await message.answer(chunk)
+            if i == 0 and thinking_msg is not None:
+                # Edit the thinking message with the first chunk
+                try:
+                    await thinking_msg.edit_text(chunk)
+                except Exception:
+                    await message.answer(chunk)
+            else:
+                await message.answer(chunk)
             if i < len(chunks) - 1:
                 await asyncio.sleep(SPLIT_DELAY)
 

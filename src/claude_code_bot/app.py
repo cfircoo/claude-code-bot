@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             config=_config,
         )
         _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
+        _telegram.thinking_threshold = float(tg_settings.get("thinking_threshold", 10.0))
         _telegram.set_agent_service(_agent_service)
         telegram_task = asyncio.create_task(_telegram.start_polling())
 

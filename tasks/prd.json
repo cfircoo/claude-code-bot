@@ -204,9 +204,10 @@
         { "command": "uv run pytest tests/ -k telegram -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 8,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:55:00Z",
       "maxAttempts": 3,
       "notes": "Use asyncio.create_task with a sleep(threshold) that sends the thinking message. Cancel it if the response arrives first. If thinking was sent, use message.edit_text() instead of message.answer().",
       "blockedBy": ["US-206"],

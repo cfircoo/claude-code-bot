@@ -70,3 +70,13 @@
   - No backoff delay between retries
 - **Suggestions for user:**
   - Consider adding a small delay (e.g., 1s) between retries
+
+## US-208: Add thinking indicator for long Telegram runs
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test that edit_text is called on thinking message for slow responses (needs time mocking)
+  - Test split messages with thinking: first chunk edits, rest send new
+- **Potential issues to watch:**
+  - edit_text can fail if message is too old or deleted — has try/except fallback
+- **Suggestions for user:**
+  - Consider customizing the "Thinking..." text via channel settings

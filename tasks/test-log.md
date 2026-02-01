@@ -57,3 +57,11 @@
   - `tests/test_cli.py::TestSendStreaming::test_retry_on_read_error` — verifies retry on ReadError with Reconnecting indicator
   - `tests/test_cli.py::TestSendStreaming::test_retry_exhausted` — verifies error after max retries
 - **Coverage notes:** 20 of 22 CLI tests pass; 2 pre-existing failures
+
+## US-208: Add thinking indicator for long Telegram runs
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_telegram.py::test_thinking_threshold_default`
+  - `tests/test_telegram.py::test_thinking_threshold_configurable`
+  - `tests/test_telegram.py::test_fast_response_no_thinking_message`
+- **Coverage notes:** 21 of 24 telegram tests pass; 3 pre-existing failures
