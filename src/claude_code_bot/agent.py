@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, AsyncIterable
 
 import structlog
 from claude_agent_sdk import (
@@ -136,9 +136,25 @@ class AgentService:
         result_text_parts: list[str] = []
         session_id: str | None = None
 
+        use_streaming_prompt = options.can_use_tool is not None
+
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                async for msg in claude_query(prompt=message, options=options):
+                # SDK requires AsyncIterable prompt when can_use_tool is set
+                prompt: str | AsyncIterable[dict[str, Any]]
+                if use_streaming_prompt:
+
+                    async def _make_prompt() -> AsyncIterable[dict[str, Any]]:
+                        yield {
+                            "type": "user",
+                            "message": {"role": "user", "content": message},
+                        }
+
+                    prompt = _make_prompt()
+                else:
+                    prompt = message
+
+                async for msg in claude_query(prompt=prompt, options=options):
                     if isinstance(msg, SystemMessage):
                         if msg.subtype == "init":
                             sid = msg.data.get("session_id")
