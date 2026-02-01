@@ -7,3 +7,9 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - Added test `test_bot_config_extra_fields_ignored`
 - Pre-existing failures: test_agent.py import error (CONVERSATION_INSTRUCTION removed), 5 test failures in test_cli.py/test_telegram.py
 - All config tests pass (8/8)
+
+## US-202: Add show_tool_activity config option — DONE
+- app.py lifespan reads show_tool_activity from telegram channel settings
+- config.example.yaml updated with commented-out example
+- Added 2 tests for default value and setting toggle
+- Pre-existing telegram test failures unchanged (3 failures)

@@ -89,10 +89,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start Telegram if configured
     telegram_task: asyncio.Task[Any] | None = None
     if _has_channel("telegram") and _config.api_keys.telegram_bot_token:
+        tg_settings: dict[str, Any] = {}
+        for ch in _config.channels:
+            if ch.type == "telegram":
+                tg_settings = ch.settings
+                break
         _telegram = TelegramChannel(
             bot_token=_config.api_keys.telegram_bot_token,
             config=_config,
         )
+        _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
         _telegram.set_agent_service(_agent_service)
         telegram_task = asyncio.create_task(_telegram.start_polling())
 

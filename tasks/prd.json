@@ -51,9 +51,10 @@
         { "command": "uv run pytest tests/ -k telegram -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 2,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:25:00Z",
       "maxAttempts": 3,
       "notes": "Update app.py lifespan to pass show_tool_activity from channel settings to TelegramChannel. Add test verifying the setting is respected.",
       "blockedBy": [],

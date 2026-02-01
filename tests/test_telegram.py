@@ -230,3 +230,18 @@ async def test_process_with_streaming_no_response(config: BotConfig) -> None:
         await channel._process_with_streaming(123, "hi", mock_message)
 
         mock_message.answer.assert_called_once_with("No response.")
+
+
+def test_show_tool_activity_default_false(config: BotConfig) -> None:
+    """show_tool_activity defaults to False."""
+    with patch("claude_code_bot.channels.telegram.Bot"):
+        channel = TelegramChannel(bot_token="123:ABC", config=config)
+        assert channel.show_tool_activity is False
+
+
+def test_show_tool_activity_set_from_settings(config: BotConfig) -> None:
+    """show_tool_activity can be toggled externally (as app.py does from config)."""
+    with patch("claude_code_bot.channels.telegram.Bot"):
+        channel = TelegramChannel(bot_token="123:ABC", config=config)
+        channel.show_tool_activity = True
+        assert channel.show_tool_activity is True

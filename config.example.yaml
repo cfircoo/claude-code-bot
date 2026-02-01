@@ -17,7 +17,9 @@ channels:
       # Optional API key for HTTP channel authentication
       # api_key: "your-secret-key"
   - type: telegram
-    settings: {}
+    settings:
+      # Show tool usage indicators in responses (default: false)
+      # show_tool_activity: true
 
 agents: {}
   # example_agent:
@@ -31,5 +33,6 @@ api_keys:
   anthropic_api_key: ""
   telegram_bot_token: ""
 
+max_turns: 10  # Max agent tool-use rounds per message
 log_level: INFO
 port: 8000
