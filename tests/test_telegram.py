@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_code_bot.channels.telegram import TelegramChannel, UserNotReachableError
+from claude_code_bot.channels.telegram import TelegramChannel, UserNotReachableError, split_message
 from claude_code_bot.config import BotConfig, PersonaConfig
 
 
@@ -230,6 +230,52 @@ async def test_process_with_streaming_no_response(config: BotConfig) -> None:
         await channel._process_with_streaming(123, "hi", mock_message)
 
         mock_message.answer.assert_called_once_with("No response.")
+
+
+class TestSplitMessage:
+    def test_short_message_not_split(self):
+        assert split_message("hello") == ["hello"]
+
+    def test_exact_limit_not_split(self):
+        text = "a" * 4096
+        assert split_message(text) == [text]
+
+    def test_split_at_paragraph_boundary(self):
+        para1 = "a" * 2000
+        para2 = "b" * 2000
+        text = para1 + "\n\n" + para2
+        chunks = split_message(text, max_len=2500)
+        assert len(chunks) == 2
+        assert chunks[0] == para1 + "\n\n"
+        assert chunks[1] == para2
+
+    def test_split_at_newline(self):
+        line1 = "a" * 2000
+        line2 = "b" * 2000
+        text = line1 + "\n" + line2
+        chunks = split_message(text, max_len=2500)
+        assert len(chunks) == 2
+        assert all(len(c) <= 2500 for c in chunks)
+
+    def test_split_at_space(self):
+        word1 = "a" * 2000
+        word2 = "b" * 2000
+        text = word1 + " " + word2
+        chunks = split_message(text, max_len=2500)
+        assert len(chunks) == 2
+
+    def test_hard_cut_no_boundary(self):
+        text = "a" * 5000
+        chunks = split_message(text, max_len=2000)
+        assert len(chunks) == 3
+        assert all(len(c) <= 2000 for c in chunks)
+        assert "".join(chunks) == text
+
+    def test_each_chunk_within_limit(self):
+        text = ("word " * 1000).strip()
+        chunks = split_message(text, max_len=100)
+        assert all(len(c) <= 100 for c in chunks)
+        assert "".join(chunks) == text
 
 
 def test_show_tool_activity_default_false(config: BotConfig) -> None:

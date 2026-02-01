@@ -153,9 +153,10 @@
         { "command": "uv run pytest tests/ -k telegram -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 6,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T08:45:00Z",
       "maxAttempts": 3,
       "notes": "Add a _split_message(text, max_len=4096) helper. Test with strings of various lengths and break patterns.",
       "blockedBy": [],

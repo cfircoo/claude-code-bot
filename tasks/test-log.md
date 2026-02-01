@@ -38,3 +38,15 @@
   - `tests/test_cli.py::TestSendStreaming::test_send_streaming_returns_none_without_conversation_id`
 - **Tests modified:** None
 - **Coverage notes:** 18 of 20 tests pass; 2 pre-existing failures
+
+## US-206: Split long Telegram responses
+- **Date:** 2026-02-01
+- **Tests created:**
+  - `tests/test_telegram.py::TestSplitMessage::test_short_message_not_split`
+  - `tests/test_telegram.py::TestSplitMessage::test_exact_limit_not_split`
+  - `tests/test_telegram.py::TestSplitMessage::test_split_at_paragraph_boundary`
+  - `tests/test_telegram.py::TestSplitMessage::test_split_at_newline`
+  - `tests/test_telegram.py::TestSplitMessage::test_split_at_space`
+  - `tests/test_telegram.py::TestSplitMessage::test_hard_cut_no_boundary`
+  - `tests/test_telegram.py::TestSplitMessage::test_each_chunk_within_limit`
+- **Coverage notes:** 18 of 21 telegram tests pass; 3 pre-existing failures

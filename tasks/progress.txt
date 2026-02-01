@@ -32,3 +32,9 @@ Started: Sun Feb  1 08:19:22 IST 2026
 - Interactive loop captures first conversation_id and reuses for subsequent messages
 - --conversation flag still overrides
 - Added 2 tests: returns conversation_id, returns None when missing
+
+## US-206: Split long Telegram responses — DONE
+- Added split_message() function with paragraph > newline > space > hard cut priority
+- _process_with_streaming sends chunks with 0.3s delay between them
+- Added 7 tests covering all split scenarios
+- Pre-existing telegram test failures unchanged (3 failures)

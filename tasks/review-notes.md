@@ -49,3 +49,14 @@
   - If server errors on first message, conversation_id stays None — subsequent messages create new conversations each time
 - **Suggestions for user:**
   - Consider showing conversation name alongside ID
+
+## US-206: Split long Telegram responses
+- **Date:** 2026-02-01
+- **Additional test ideas:**
+  - Test with Markdown formatting to ensure splits don't break code blocks
+  - Test with exactly 4096 * 2 + 1 characters
+- **Potential issues to watch:**
+  - Splitting inside a Markdown code block could break formatting
+  - 0.3s delay between chunks means 10 chunks = 3s total delay
+- **Suggestions for user:**
+  - Consider Markdown-aware splitting that doesn't break code fences

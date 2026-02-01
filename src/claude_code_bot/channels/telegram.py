@@ -18,6 +18,40 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 TYPING_INTERVAL = 4.0  # seconds between typing indicator refreshes
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+SPLIT_DELAY = 0.3  # seconds between split messages
+
+
+def split_message(text: str, max_len: int = TELEGRAM_MAX_MESSAGE_LENGTH) -> list[str]:
+    """Split text into chunks of at most max_len characters.
+
+    Prefers splitting at paragraph boundaries (double newline), then single
+    newline, then space. Falls back to hard cut if no boundary found.
+    """
+    if len(text) <= max_len:
+        return [text]
+
+    chunks: list[str] = []
+    while text:
+        if len(text) <= max_len:
+            chunks.append(text)
+            break
+
+        # Try split boundaries in preference order
+        cut = -1
+        for sep in ("\n\n", "\n", " "):
+            idx = text.rfind(sep, 0, max_len)
+            if idx > 0:
+                cut = idx + len(sep)
+                break
+
+        if cut <= 0:
+            cut = max_len
+
+        chunks.append(text[:cut])
+        text = text[cut:]
+
+    return chunks
 
 
 class UserNotReachableError(Exception):
@@ -98,7 +132,11 @@ class TelegramChannel:
             response_parts.append(result_text)
 
         final = "\n\n".join(response_parts) if response_parts else "No response."
-        await message.answer(final)
+        chunks = split_message(final)
+        for i, chunk in enumerate(chunks):
+            await message.answer(chunk)
+            if i < len(chunks) - 1:
+                await asyncio.sleep(SPLIT_DELAY)
 
     def _register_handlers(self) -> None:
         """Register message handlers."""
