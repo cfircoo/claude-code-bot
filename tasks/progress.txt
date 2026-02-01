@@ -66,3 +66,9 @@ Started: Sun Feb  1 08:19:22 IST 2026
 ## US-211: Update system prompt with memory instructions — DONE
 - Updated config.example.yaml system_prompt with memory system instructions
 - Instructions cover all zones, guidelines, and proactive saving
+
+## US-212: Add permission_mode and allowed_tools to config — DONE
+- Added permission_mode (Literal type with validation), allowed_tools, disallowed_tools to BotConfig
+- Passed through to ClaudeAgentOptions in chat_stream
+- Added 4 tests: defaults, valid values, invalid value rejection, config loading
+- config.example.yaml updated

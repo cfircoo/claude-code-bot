@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -63,6 +63,9 @@ class BotConfig(BaseModel):
     log_level: str = "INFO"
     port: int = 8000
     memory_path: str = "~/.claude-bot/memory"
+    permission_mode: Literal["default", "acceptEdits", "plan", "bypassPermissions"] = "acceptEdits"
+    allowed_tools: list[str] = Field(default_factory=list)
+    disallowed_tools: list[str] = Field(default_factory=list)
 
 
 def _apply_env_overrides(config: BotConfig) -> BotConfig:

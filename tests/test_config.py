@@ -88,6 +88,40 @@ def test_bot_config_extra_fields_ignored(tmp_path: Path) -> None:
     assert config.persona.name == "Assistant"  # defaults still work
 
 
+def test_permission_mode_defaults() -> None:
+    config = BotConfig()
+    assert config.permission_mode == "acceptEdits"
+    assert config.allowed_tools == []
+    assert config.disallowed_tools == []
+
+
+def test_permission_mode_valid_values(tmp_path: Path) -> None:
+    for mode in ["default", "acceptEdits", "plan", "bypassPermissions"]:
+        path = tmp_path / f"config_{mode}.yaml"
+        with open(path, "w") as f:
+            yaml.dump({"permission_mode": mode}, f)
+        config = load_config(str(path))
+        assert config.permission_mode == mode
+
+
+def test_permission_mode_invalid(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    with open(path, "w") as f:
+        yaml.dump({"permission_mode": "invalid"}, f)
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        load_config(str(path))
+
+
+def test_allowed_tools_from_config(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    with open(path, "w") as f:
+        yaml.dump({"allowed_tools": ["Read", "Write"], "disallowed_tools": ["Bash"]}, f)
+    config = load_config(str(path))
+    assert config.allowed_tools == ["Read", "Write"]
+    assert config.disallowed_tools == ["Bash"]
+
+
 def test_bot_config_model_validation() -> None:
     config = BotConfig(
         persona=PersonaConfig(name="Test"),

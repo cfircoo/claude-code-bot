@@ -116,7 +116,12 @@ class AgentService:
             system_prompt=system_prompt,
             include_partial_messages=True,
             max_turns=self.config.max_turns,
+            permission_mode=self.config.permission_mode,
         )
+        if self.config.allowed_tools:
+            options.allowed_tools = self.config.allowed_tools
+        if self.config.disallowed_tools:
+            options.disallowed_tools = self.config.disallowed_tools
 
         if meta.session_id:
             options.resume = meta.session_id

@@ -322,9 +322,10 @@
         { "command": "uv run pytest tests/ -k agent -v", "expect": "exit_code:0" },
         { "command": "uv run pytest tests/ -v", "expect": "exit_code:0" }
       ],
-      "status": "pending",
+      "status": "done",
       "priority": 12,
-      "attempts": 0,
+      "attempts": 1,
+      "completedAt": "2026-02-01T09:10:00Z",
       "maxAttempts": 3,
       "notes": "Simple config-to-options passthrough. Add tests that verify the options are correctly built from config values.",
       "blockedBy": ["US-201"],

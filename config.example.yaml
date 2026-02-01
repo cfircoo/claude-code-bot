@@ -54,5 +54,9 @@ max_turns: 10  # Max agent tool-use rounds per message
 # Persistent memory folder. Auto-creates core/, to_improve/ subdirectories.
 # Memory contents are injected into the system prompt automatically.
 # memory_path: "~/.claude-bot/memory"
+# SDK permission mode: default, acceptEdits, plan, bypassPermissions
+permission_mode: acceptEdits
+# allowed_tools: []  # Empty = no restriction. Example: ["Read", "Write"]
+# disallowed_tools: []  # Example: ["Bash"]
 log_level: INFO
 port: 8000
