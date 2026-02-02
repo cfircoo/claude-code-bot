@@ -14,6 +14,7 @@ RUN uv sync --frozen --no-dev --no-editable
 
 COPY src/ src/
 COPY config.example.yaml /app/config.yaml
+COPY .claude/ /app/.claude/
 
 
 VOLUME ["/app/data"]

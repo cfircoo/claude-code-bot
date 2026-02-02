@@ -445,5 +445,7 @@ async def test_chat_stream_allowed_tools(config: BotConfig, store: ConversationS
     with patch("claude_code_bot.agent.claude_query", mock_query):
         _ = [e async for e in agent.chat_stream("user1", "hi")]
 
-    assert captured_options["allowed_tools"] == ["Read", "Write"]
+    assert "Read" in captured_options["allowed_tools"]
+    assert "Write" in captured_options["allowed_tools"]
+    assert "Skill" in captured_options["allowed_tools"]
     assert captured_options["disallowed_tools"] == ["Bash"]

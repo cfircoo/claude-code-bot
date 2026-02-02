@@ -117,6 +117,7 @@ class BotConfig(BaseModel):
     allowed_tools: list[str] = Field(default_factory=list)
     disallowed_tools: list[str] = Field(default_factory=list)
     tools_requiring_approval: list[str] = Field(default_factory=lambda: ["Bash"])
+    skills_enabled: bool = True
 
 
 def _apply_env_overrides(config: BotConfig) -> BotConfig:
