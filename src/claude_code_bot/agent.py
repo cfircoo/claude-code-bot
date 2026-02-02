@@ -145,8 +145,16 @@ class AgentService:
             max_turns=self.config.max_turns,
             permission_mode=self.config.permission_mode,
         )
+        if self.config.skills_enabled:
+            options.setting_sources = ["user", "project"]
+            if not options.allowed_tools:
+                options.allowed_tools = []
+            if "Skill" not in options.allowed_tools:
+                options.allowed_tools.append("Skill")
         if self.config.allowed_tools:
             options.allowed_tools = self.config.allowed_tools
+            if self.config.skills_enabled and "Skill" not in options.allowed_tools:
+                options.allowed_tools.append("Skill")
         if self.config.disallowed_tools:
             options.disallowed_tools = self.config.disallowed_tools
         if self.permission_manager:
@@ -274,12 +282,31 @@ class AgentService:
 
             except Exception as e:
                 last_error = e
+                error_str = str(e).lower()
                 logger.error(
                     "llm_call_failed",
                     attempt=attempt,
                     error=str(e),
                     error_type=type(e).__name__,
                 )
+
+                # Non-retryable errors — return immediately with clear message
+                if "billing" in error_str or "spending" in error_str or "budget" in error_str:
+                    yield {"type": "error", "content": "API billing limit reached. Check your Anthropic plan."}
+                    return
+                if "rate" in error_str and "limit" in error_str:
+                    yield {"type": "error", "content": "Rate limit hit. Please wait a moment and try again."}
+                    return
+                if "authentication" in error_str or "invalid.*key" in error_str or "401" in error_str:
+                    yield {"type": "error", "content": "API authentication failed. Check your API key."}
+                    return
+                if "overloaded" in error_str or "529" in error_str:
+                    yield {"type": "error", "content": "Claude is overloaded. Please try again shortly."}
+                    return
+                if "stream closed" in error_str:
+                    yield {"type": "error", "content": "Connection to Claude was interrupted. Please try again."}
+                    return
+
                 if attempt < MAX_RETRIES:
                     await asyncio.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
 

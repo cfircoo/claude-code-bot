@@ -106,6 +106,8 @@ max_turns: 10  # Max agent tool-use rounds per message
 # memory_path: "~/.claude-bot/memory"
 # SDK permission mode: default, acceptEdits, plan, bypassPermissions
 permission_mode: acceptEdits
+# Skills: SDK loads .claude/skills/ automatically when enabled
+# skills_enabled: true  # default: true
 # allowed_tools: []  # Empty = no restriction. Example: ["Read", "Write"]
 # disallowed_tools: []  # Example: ["Bash"]
 # Tools that require interactive user approval before execution
