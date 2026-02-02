@@ -22,7 +22,7 @@ async def client():
 # --- SSE Streaming Endpoint Tests ---
 
 
-async def _fake_chat_stream(user_id: str, message: str, conversation_id: str | None = None):
+async def _fake_chat_stream(user_id: str, message: str, conversation_id: str | None = None, metadata=None, restrictions=None):
     """Fake async generator that yields test events."""
     yield {"type": "text", "content": "Hello"}
     yield {"type": "text", "content": " world"}
@@ -31,7 +31,11 @@ async def _fake_chat_stream(user_id: str, message: str, conversation_id: str | N
 
 @pytest.mark.asyncio
 async def test_chat_stream_returns_sse(client: AsyncClient) -> None:
-    with patch("claude_code_bot.app._agent_service") as mock_svc:
+    from claude_code_bot.config import BotConfig
+    with (
+        patch("claude_code_bot.app._agent_service") as mock_svc,
+        patch("claude_code_bot.app._config", BotConfig()),
+    ):
         mock_svc.chat_stream = _fake_chat_stream
         response = await client.post(
             "/chat/stream",
@@ -53,11 +57,15 @@ async def test_chat_stream_returns_sse(client: AsyncClient) -> None:
 async def test_chat_stream_passes_conversation_id(client: AsyncClient) -> None:
     captured: dict = {}
 
-    async def capturing_stream(user_id: str, message: str, conversation_id: str | None = None):
+    async def capturing_stream(user_id: str, message: str, conversation_id: str | None = None, metadata=None, restrictions=None):
         captured["conversation_id"] = conversation_id
         yield {"type": "result", "content": "ok", "session_id": "s"}
 
-    with patch("claude_code_bot.app._agent_service") as mock_svc:
+    from claude_code_bot.config import BotConfig
+    with (
+        patch("claude_code_bot.app._agent_service") as mock_svc,
+        patch("claude_code_bot.app._config", BotConfig()),
+    ):
         mock_svc.chat_stream = capturing_stream
         response = await client.post(
             "/chat/stream",
@@ -78,7 +86,14 @@ async def test_chat_stream_empty_message(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_chat_stream_auth_rejected(client: AsyncClient) -> None:
-    with patch("claude_code_bot.app._get_http_api_key", return_value="secret"):
+    from claude_code_bot.config import BotConfig, HttpSecurityConfig
+    cfg = BotConfig()
+    cfg.security.http = HttpSecurityConfig(deny_unauthenticated=True)
+    with (
+        patch("claude_code_bot.app._get_http_api_key", return_value="secret"),
+        patch("claude_code_bot.app._config", cfg),
+        patch("claude_code_bot.app._agent_service", MagicMock()),
+    ):
         response = await client.post(
             "/chat/stream",
             json={"user_id": "u1", "message": "hi"},
@@ -88,8 +103,10 @@ async def test_chat_stream_auth_rejected(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_chat_stream_auth_accepted(client: AsyncClient) -> None:
+    from claude_code_bot.config import BotConfig
     with (
         patch("claude_code_bot.app._get_http_api_key", return_value="secret"),
+        patch("claude_code_bot.app._config", BotConfig()),
         patch("claude_code_bot.app._agent_service") as mock_svc,
     ):
         mock_svc.chat_stream = _fake_chat_stream

@@ -16,6 +16,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 if TYPE_CHECKING:
     from claude_code_bot.agent import AgentService
     from claude_code_bot.config import BotConfig
+    from claude_code_bot.hooks import HookManager
+    from claude_code_bot.hooks.telegram_auth import TelegramAuthGuard
     from claude_code_bot.permissions import PermissionManager
 
 logger = structlog.get_logger()
@@ -32,6 +34,9 @@ BOT_COMMANDS = {
     "/commands": "Show all available commands",
     "/cost": "Show API usage costs",
     "/model": "Switch AI model",
+    "/skills": "List available API skills",
+    "/hooks": "List active SDK hooks",
+    "/sessions": "Manage sessions (list or new)",
 }
 
 # SDK built-in commands (forwarded to SDK as prompt)
@@ -88,7 +93,12 @@ class UserNotReachableError(Exception):
 class TelegramChannel:
     """Telegram bot adapter."""
 
-    def __init__(self, bot_token: str, config: BotConfig) -> None:
+    def __init__(
+        self,
+        bot_token: str,
+        config: BotConfig,
+        hook_manager: HookManager | None = None,
+    ) -> None:
         if not bot_token:
             raise ValueError("Invalid Telegram bot token")
         self.bot = Bot(token=bot_token)
@@ -96,17 +106,24 @@ class TelegramChannel:
         self.config = config
         self._agent_service: AgentService | None = None
         self._known_chat_ids: set[int] = set()
+        self._chat_conversations: dict[int, str] = {}  # chat_id -> conversation_id
         self._greeted_users: set[int] = set()
         self._start_time: float = __import__("time").time()
         self.show_tool_activity: bool = False
         self.thinking_threshold: float = 10.0
         self._permission_manager: PermissionManager | None = None
+        self._hook_manager: HookManager | None = hook_manager
+        self._auth_guard: TelegramAuthGuard | None = None
 
         self._register_handlers()
 
     def set_agent_service(self, agent_service: AgentService) -> None:
         """Set the agent service for processing messages."""
         self._agent_service = agent_service
+
+    def set_auth_guard(self, guard: TelegramAuthGuard) -> None:
+        """Set the auth guard for user authorization."""
+        self._auth_guard = guard
 
     def set_permission_manager(self, manager: PermissionManager) -> None:
         """Set the permission manager and register as notifier."""
@@ -193,11 +210,20 @@ class TelegramChannel:
         thinking_task = asyncio.create_task(_send_thinking())
 
         metadata = self._extract_metadata(message)
+        # Add authentication status based on auth guard
+        if self._auth_guard and message.from_user:
+            metadata["authenticated"] = self._auth_guard.is_authorized(
+                message.from_user.id, message.from_user.username
+            )
+        else:
+            metadata["authenticated"] = not bool(self._auth_guard)
         logger.debug("telegram_message_received", user_message=user_message, **metadata)
 
         try:
+            conversation_id = self._chat_conversations.get(chat_id)
             async for event in self._agent_service.chat_stream(
-                user_id=str(chat_id), message=user_message, metadata=metadata
+                user_id=str(chat_id), message=user_message,
+                conversation_id=conversation_id, metadata=metadata,
             ):
                 event_type = event.get("type", "")
 
@@ -209,7 +235,10 @@ class TelegramChannel:
                     tool_activities.append(event.get("tool", ""))
                 elif event_type == "result":
                     usage_info = event.get("usage", {})
-                    usage_info["conversation_id"] = event.get("conversation_id", "")
+                    cid = event.get("conversation_id", "")
+                    usage_info["conversation_id"] = cid
+                    if cid:
+                        self._chat_conversations[chat_id] = cid
                 elif event_type == "conversation_switched":
                     cid = event.get("conversation_id", "")
                     tool_activities.append(f"Switched to conversation {cid}")
@@ -272,6 +301,20 @@ class TelegramChannel:
         async def handle_text(message: TelegramMessage) -> None:
             if message.chat is None or message.text is None:
                 return
+
+            # Auth check — block unauthorized users
+            if self._auth_guard and message.from_user:
+                if not self._auth_guard.is_authorized(
+                    message.from_user.id, message.from_user.username
+                ):
+                    logger.warning(
+                        "telegram_unauthorized",
+                        user_id=message.from_user.id,
+                        username=message.from_user.username,
+                    )
+                    await message.answer(self._auth_guard.deny_message)
+                    return
+
             chat_id = message.chat.id
             self._known_chat_ids.add(chat_id)
 
@@ -297,6 +340,15 @@ class TelegramChannel:
                 if cmd in ("/model", "/models"):
                     await self._handle_model(message)
                     return
+                if cmd == "/skills":
+                    await self._handle_skills(message)
+                    return
+                if cmd == "/hooks":
+                    await self._handle_hooks(message)
+                    return
+                if cmd == "/sessions":
+                    await self._handle_session(message)
+                    return
 
                 # SDK commands — forward to agent as-is
                 if cmd in SDK_COMMANDS:
@@ -319,9 +371,19 @@ class TelegramChannel:
 
             await self._process_with_streaming(chat_id, text, message)
 
+        def _check_callback_auth(callback: CallbackQuery) -> bool:
+            """Return True if user is authorized (or no guard set)."""
+            if not self._auth_guard:
+                return True
+            if callback.from_user:
+                return self._auth_guard.is_authorized(
+                    callback.from_user.id, callback.from_user.username
+                )
+            return False
+
         @self.dp.callback_query(F.data.startswith("model:"))
         async def handle_model_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             model_id = callback.data.split(":", 1)[1]
             self.config.model = model_id
@@ -335,9 +397,82 @@ class TelegramChannel:
                 except Exception:
                     pass
 
+        @self.dp.callback_query(F.data.startswith("skill:"))
+        async def handle_skill_callback(callback: CallbackQuery) -> None:
+            if callback.data is None or not _check_callback_auth(callback):
+                return
+            skill_id = callback.data.split(":", 1)[1]
+            await callback.answer("Loading skill details...")
+            skill = await self._fetch_skill(skill_id)
+            if not skill:
+                if callback.message:
+                    try:
+                        await callback.message.answer("Could not fetch skill details.")  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                return
+            title = skill.get("display_title", skill.get("id", "?"))
+            source = skill.get("source", "unknown")
+            version = skill.get("latest_version", "—")
+            created = skill.get("created_at", "—")
+            updated = skill.get("updated_at", "—")
+            # Format timestamps (trim to date)
+            if created and "T" in created:
+                created = created.split("T")[0]
+            if updated and "T" in updated:
+                updated = updated.split("T")[0]
+            lines = [
+                f"🛠 *{title}*",
+                "",
+                f"*ID:* `{skill.get('id', '—')}`",
+                f"*Source:* {source}",
+                f"*Version:* `{version}`",
+                f"*Created:* {created}",
+                f"*Updated:* {updated}",
+            ]
+            if callback.message:
+                try:
+                    await callback.message.answer(  # type: ignore[union-attr]
+                        "\n".join(lines), parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
+
+        @self.dp.callback_query(F.data.startswith("hook:"))
+        async def handle_hook_callback(callback: CallbackQuery) -> None:
+            if callback.data is None or not _check_callback_auth(callback):
+                return
+            idx_str = callback.data.split(":", 1)[1]
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                return
+            await callback.answer("Loading hook details...")
+            if not self._hook_manager:
+                return
+            hooks = self._hook_manager.list_hooks()
+            if idx < 0 or idx >= len(hooks):
+                return
+            h = hooks[idx]
+            lines = [
+                f"🪝 *Hook #{idx + 1}*",
+                "",
+                f"*Event:* `{h['event']}`",
+                f"*Matcher:* `{h['matcher']}`",
+                f"*Name:* `{h['name']}`",
+                f"*Timeout:* {h['timeout']}s",
+            ]
+            if callback.message:
+                try:
+                    await callback.message.answer(  # type: ignore[union-attr]
+                        "\n".join(lines), parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
+
         @self.dp.callback_query(F.data.startswith("perm:"))
         async def handle_permission_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             parts = callback.data.split(":", 2)
             if len(parts) != 3:
@@ -355,6 +490,38 @@ class TelegramChannel:
                     )
                 except Exception:
                     pass
+
+        @self.dp.callback_query(F.data.startswith("session:"))
+        async def handle_session_callback(callback: CallbackQuery) -> None:
+            if callback.data is None or not _check_callback_auth(callback):
+                return
+            action = callback.data.split(":", 1)[1]
+            chat_id = callback.message.chat.id if callback.message and callback.message.chat else None
+            if not chat_id:
+                return
+
+            if action == "new":
+                self._chat_conversations.pop(chat_id, None)
+                await callback.answer("New session started")
+                if callback.message:
+                    try:
+                        await callback.message.edit_text(  # type: ignore[union-attr]
+                            "New session started. Send a message to begin."
+                        )
+                    except Exception:
+                        pass
+            elif action.startswith("switch:"):
+                conv_id = action.split(":", 1)[1]
+                self._chat_conversations[chat_id] = conv_id
+                await callback.answer(f"Switched to {conv_id[:8]}...")
+                if callback.message:
+                    try:
+                        await callback.message.edit_text(  # type: ignore[union-attr]
+                            f"Switched to session `{conv_id[:8]}...`",
+                            parse_mode="Markdown",
+                        )
+                    except Exception:
+                        pass
 
     async def send_proactive_message(self, user_id: str, text: str) -> None:
         """Send a message to a user without a prior trigger.
@@ -449,6 +616,151 @@ class TelegramChannel:
         model_id = models.get(choice, DEFAULT_MODELS.get(choice, choice))
         self.config.model = model_id
         await message.answer(f"Model switched to `{model_id}`", parse_mode="Markdown")
+
+    async def _fetch_skills(self) -> list[dict]:
+        """Fetch available skills from Anthropic API."""
+        import httpx
+
+        api_key = (
+            self.config.api_keys.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        if not api_key:
+            return []
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://api.anthropic.com/v1/skills",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-beta": "skills-2025-10-02",
+                    },
+                    params={"limit": 100},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                return resp.json().get("data", [])
+        except Exception:
+            logger.debug("skills_api_fetch_failed", exc_info=True)
+            return []
+
+    async def _fetch_skill(self, skill_id: str) -> dict | None:
+        """Fetch a single skill by ID from the Anthropic API."""
+        import httpx
+
+        api_key = (
+            self.config.api_keys.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        if not api_key:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.anthropic.com/v1/skills/{skill_id}",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-beta": "skills-2025-10-02",
+                    },
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except Exception:
+            logger.debug("skill_api_fetch_failed", skill_id=skill_id, exc_info=True)
+            return None
+
+    async def _handle_skills(self, message: TelegramMessage) -> None:
+        """Handle /skills — list available API skills with detail buttons."""
+        skills = await self._fetch_skills()
+        if not skills:
+            await message.answer("No skills found (API key may be missing or no skills available).")
+            return
+
+        lines = ["🛠 *Available Skills*", ""]
+        buttons = []
+        for s in skills:
+            title = s.get("display_title", s.get("id", "?"))
+            source = s.get("source", "")
+            tag = f" ({source})" if source else ""
+            lines.append(f"• *{title}*{tag}")
+            skill_id = s.get("id", "")
+            cb_data = f"skill:{skill_id}"
+            if skill_id and len(cb_data) <= 64:
+                buttons.append(InlineKeyboardButton(text=f"ℹ️ {title}", callback_data=cb_data))
+
+        # 2 buttons per row
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
+
+    async def _handle_hooks(self, message: TelegramMessage) -> None:
+        """Handle /hooks — list active SDK hooks with detail buttons."""
+        if not self._hook_manager:
+            await message.answer("No hooks configured.")
+            return
+
+        hooks = self._hook_manager.list_hooks()
+        if not hooks:
+            await message.answer("No hooks configured.")
+            return
+
+        lines = ["🪝 *Active Hooks*", ""]
+        buttons = []
+        for i, h in enumerate(hooks):
+            lines.append(f"• *{h['name']}* — `{h['event']}` ({h['matcher']})")
+            cb_data = f"hook:{i}"
+            buttons.append(
+                InlineKeyboardButton(text=f"ℹ️ {h['name'][:20]}", callback_data=cb_data)
+            )
+
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
+
+    async def _handle_session(self, message: TelegramMessage) -> None:
+        """Handle /session — list sessions or start new."""
+        if message.chat is None or self._agent_service is None:
+            await message.answer("Bot not ready.")
+            return
+
+        chat_id = message.chat.id
+        store = self._agent_service.store
+        convos = store.list(str(chat_id))
+        current_cid = self._chat_conversations.get(chat_id)
+
+        lines = ["📋 *Sessions*", ""]
+        buttons: list[list[InlineKeyboardButton]] = []
+
+        # New session button
+        buttons.append([
+            InlineKeyboardButton(text="➕ New Session", callback_data="session:new")
+        ])
+
+        if convos:
+            # Sort by last_active descending, show recent 10
+            recent = sorted(convos, key=lambda c: c.last_active, reverse=True)[:10]
+            for c in recent:
+                short_id = c.conversation_id[:8]
+                name = c.name or short_id
+                active = " ✅" if c.conversation_id == current_cid else ""
+                msgs = c.message_count
+                lines.append(f"• `{short_id}` — {name} ({msgs} msgs){active}")
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{'✅ ' if c.conversation_id == current_cid else ''}{name[:25]}",
+                        callback_data=f"session:switch:{c.conversation_id}",
+                    )
+                ])
+        else:
+            lines.append("No sessions yet.")
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
     async def _handle_cost(self, message: TelegramMessage) -> None:
         """Handle /cost — show usage costs."""
@@ -580,6 +892,9 @@ class TelegramChannel:
             BotCommand(command="clear", description="Reset conversation"),
             BotCommand(command="cost", description="Show API usage costs"),
             BotCommand(command="model", description="Switch AI model"),
+            BotCommand(command="skills", description="List available API skills"),
+            BotCommand(command="hooks", description="List active SDK hooks"),
+            BotCommand(command="sessions", description="Manage sessions"),
         ]
         await self.bot.set_my_commands(commands)
 

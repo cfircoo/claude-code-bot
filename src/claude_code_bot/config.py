@@ -50,6 +50,53 @@ class ApiKeysConfig(BaseModel):
     telegram_bot_token: str = ""
 
 
+class UserRestrictions(BaseModel):
+    """Shared tool and path restrictions for any channel."""
+
+    allowed_tools: list[str] = Field(default_factory=list)
+    writable_paths: list[str] = Field(default_factory=list)
+    readable_paths: list[str] = Field(default_factory=list)
+
+
+class AllowedUser(UserRestrictions):
+    """An authorized Telegram user with per-user permissions."""
+
+    user_id: int
+    username: str
+
+
+class TelegramSecurityConfig(BaseModel):
+    """Telegram-specific security settings."""
+
+    allowed_users: list[AllowedUser] = Field(default_factory=list)
+    deny_message: str = "You are not authorized to use this bot."
+
+
+class HttpSecurityConfig(BaseModel):
+    """HTTP channel security settings."""
+
+    default_restrictions: UserRestrictions | None = None
+    deny_unauthenticated: bool = False
+
+
+class SecurityConfig(BaseModel):
+    """Security configuration."""
+
+    telegram: TelegramSecurityConfig = Field(default_factory=TelegramSecurityConfig)
+    http: HttpSecurityConfig = Field(default_factory=HttpSecurityConfig)
+
+
+class HooksConfig(BaseModel):
+    """Hook configuration for SDK hooks."""
+
+    file_guards: list[str] = Field(default_factory=list)
+    command_guards: list[str] = Field(default_factory=list)
+    auto_approve: list[str] = Field(default_factory=list)
+    audit_log: bool = False
+    damage_control: bool = False
+    damage_control_patterns: str = ""
+
+
 class BotConfig(BaseModel):
     """Root bot configuration."""
 
@@ -59,6 +106,8 @@ class BotConfig(BaseModel):
     channels: list[ChannelConfig] = Field(default_factory=list)
     agents: dict[str, SubAgentConfig] = Field(default_factory=dict)
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    hooks: HooksConfig = Field(default_factory=HooksConfig)
     model: str = "claude-sonnet-4-20250514"
     max_turns: int = 10
     log_level: str = "INFO"
@@ -83,6 +132,13 @@ def _apply_env_overrides(config: BotConfig) -> BotConfig:
     env_log_level = os.environ.get("LOG_LEVEL")
     if env_log_level:
         config.log_level = env_log_level
+
+    env_http_key = os.environ.get("HTTP_API_KEY")
+    if env_http_key:
+        for ch in config.channels:
+            if ch.type == "http":
+                ch.settings["api_key"] = env_http_key
+                break
 
     return config
 

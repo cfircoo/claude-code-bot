@@ -16,6 +16,8 @@ from claude_code_bot.agent import AgentService
 from claude_code_bot.agents import SubAgentRegistry, load_sub_agents_from_config
 from claude_code_bot.channels.telegram import TelegramChannel
 from claude_code_bot.config import BotConfig, load_config
+from claude_code_bot.hooks import HookManager
+from claude_code_bot.hooks.telegram_auth import TelegramAuthGuard
 from claude_code_bot.logging import setup_logging
 from claude_code_bot.memory import ConversationStore
 from claude_code_bot.memory_store import MemoryStore
@@ -92,12 +94,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _permission_manager = PermissionManager(
         tools_requiring_approval=_config.tools_requiring_approval,
     )
+
+    # Build hook manager from config
+    hook_manager = HookManager()
+    if _config.hooks.file_guards:
+        hook_manager.add_file_guard(_config.hooks.file_guards)
+    if _config.hooks.command_guards:
+        hook_manager.add_command_guard(_config.hooks.command_guards)
+    if _config.hooks.auto_approve:
+        hook_manager.add_auto_approve(_config.hooks.auto_approve)
+    if _config.hooks.audit_log:
+        hook_manager.add_audit_logger()
+    if _config.hooks.damage_control:
+        hook_manager.add_damage_control(
+            _config.hooks.damage_control_patterns or None
+        )
+
     _agent_service = AgentService(
         config=_config,
         store=_store,
         registry=registry,
         memory_store=_memory_store,
         permission_manager=_permission_manager,
+        hook_manager=hook_manager if hook_manager.list_hooks() else None,
     )
 
     # Start Telegram if configured
@@ -111,9 +130,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _telegram = TelegramChannel(
             bot_token=_config.api_keys.telegram_bot_token,
             config=_config,
+            hook_manager=hook_manager if hook_manager.list_hooks() else None,
         )
         _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
         _telegram.thinking_threshold = float(tg_settings.get("thinking_threshold", 10.0))
+        if _config.security.telegram.allowed_users:
+            _telegram.set_auth_guard(
+                TelegramAuthGuard(
+                    _config.security.telegram.allowed_users,
+                    deny_message=_config.security.telegram.deny_message,
+                )
+            )
         if _permission_manager:
             _telegram.set_permission_manager(_permission_manager)
         _telegram.set_agent_service(_agent_service)
@@ -146,23 +173,40 @@ async def health() -> dict[str, str]:
 @app.post("/chat/stream")
 async def chat_stream(request: Request, body: ChatStreamRequest) -> StreamingResponse:
     """SSE endpoint that streams events from chat_stream()."""
-    api_key = _get_http_api_key()
-    if api_key:
-        provided_key = request.headers.get("X-API-Key", "")
-        if provided_key != api_key:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    if _agent_service is None:
+    if _agent_service is None or _config is None:
         raise HTTPException(status_code=503, detail="Bot not initialized")
+
+    # Resolve HTTP restrictions based on API key
+    from claude_code_bot.config import UserRestrictions
+
+    api_key = _get_http_api_key()
+    provided_key = request.headers.get("X-API-Key", "")
+    restrictions: UserRestrictions | None = None
+
+    if api_key and provided_key == api_key:
+        pass  # authenticated — full access
+    elif _config.security.http.deny_unauthenticated:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        restrictions = _config.security.http.default_restrictions
+
+    authenticated = api_key is not None and provided_key == api_key
+    metadata = {
+        "channel": "http",
+        "authenticated": authenticated,
+        "user_id": body.user_id,
+    }
 
     async def event_generator() -> AsyncGenerator[str, None]:
         async for event in _agent_service.chat_stream(
             user_id=body.user_id,
             message=body.message,
             conversation_id=body.conversation_id,
+            metadata=metadata,
+            restrictions=restrictions,
         ):
             yield f"data: {json.dumps(event)}\n\n"
 
