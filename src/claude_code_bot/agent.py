@@ -101,6 +101,7 @@ class AgentService:
         user_id: str,
         message: str,
         conversation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, str], None]:
         """Process a message and yield streaming events.
 
@@ -113,7 +114,17 @@ class AgentService:
           - {type: "conversation_switched", conversation_id: str}
         """
         meta = self._resolve_conversation(user_id, conversation_id)
+        logger.debug("chat_stream_request", user_id=user_id, message=message, conversation_id=meta.conversation_id, metadata=metadata)
         system_prompt = self._build_system_prompt()
+
+        # Inject channel/user context into system prompt
+        if metadata:
+            context_parts = []
+            for k, v in metadata.items():
+                if v is not None:
+                    context_parts.append(f"  {k}: {v}")
+            if context_parts:
+                system_prompt += "\n\n## Current Message Context\n" + "\n".join(context_parts)
 
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,

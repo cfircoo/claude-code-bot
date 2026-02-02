@@ -125,6 +125,23 @@ class TelegramChannel:
             except asyncio.TimeoutError:
                 pass
 
+    @staticmethod
+    def _extract_metadata(message: TelegramMessage) -> dict:
+        """Extract user and chat metadata from a Telegram message."""
+        meta: dict = {
+            "channel": "telegram",
+            "chat_id": message.chat.id if message.chat else None,
+            "chat_type": message.chat.type if message.chat else None,
+        }
+        if message.from_user:
+            meta["user_id"] = message.from_user.id
+            meta["username"] = message.from_user.username
+            meta["first_name"] = message.from_user.first_name
+            meta["last_name"] = message.from_user.last_name
+            meta["language_code"] = message.from_user.language_code
+            meta["is_bot"] = message.from_user.is_bot
+        return meta
+
     async def _process_with_streaming(
         self, chat_id: int, user_message: str, message: TelegramMessage
     ) -> None:
@@ -148,9 +165,12 @@ class TelegramChannel:
 
         thinking_task = asyncio.create_task(_send_thinking())
 
+        metadata = self._extract_metadata(message)
+        logger.debug("telegram_message_received", user_message=user_message, **metadata)
+
         try:
             async for event in self._agent_service.chat_stream(
-                user_id=str(chat_id), message=user_message
+                user_id=str(chat_id), message=user_message, metadata=metadata
             ):
                 event_type = event.get("type", "")
 
