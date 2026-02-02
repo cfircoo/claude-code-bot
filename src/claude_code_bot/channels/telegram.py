@@ -16,6 +16,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 if TYPE_CHECKING:
     from claude_code_bot.agent import AgentService
     from claude_code_bot.config import BotConfig
+    from claude_code_bot.hooks import HookManager
     from claude_code_bot.permissions import PermissionManager
 
 logger = structlog.get_logger()
@@ -33,6 +34,7 @@ BOT_COMMANDS = {
     "/cost": "Show API usage costs",
     "/model": "Switch AI model",
     "/skills": "List available API skills",
+    "/hooks": "List active SDK hooks",
 }
 
 # SDK built-in commands (forwarded to SDK as prompt)
@@ -89,7 +91,12 @@ class UserNotReachableError(Exception):
 class TelegramChannel:
     """Telegram bot adapter."""
 
-    def __init__(self, bot_token: str, config: BotConfig) -> None:
+    def __init__(
+        self,
+        bot_token: str,
+        config: BotConfig,
+        hook_manager: HookManager | None = None,
+    ) -> None:
         if not bot_token:
             raise ValueError("Invalid Telegram bot token")
         self.bot = Bot(token=bot_token)
@@ -102,6 +109,7 @@ class TelegramChannel:
         self.show_tool_activity: bool = False
         self.thinking_threshold: float = 10.0
         self._permission_manager: PermissionManager | None = None
+        self._hook_manager: HookManager | None = hook_manager
 
         self._register_handlers()
 
@@ -301,6 +309,9 @@ class TelegramChannel:
                 if cmd == "/skills":
                     await self._handle_skills(message)
                     return
+                if cmd == "/hooks":
+                    await self._handle_hooks(message)
+                    return
 
                 # SDK commands — forward to agent as-is
                 if cmd in SDK_COMMANDS:
@@ -371,6 +382,38 @@ class TelegramChannel:
                 f"*Version:* `{version}`",
                 f"*Created:* {created}",
                 f"*Updated:* {updated}",
+            ]
+            if callback.message:
+                try:
+                    await callback.message.answer(  # type: ignore[union-attr]
+                        "\n".join(lines), parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
+
+        @self.dp.callback_query(F.data.startswith("hook:"))
+        async def handle_hook_callback(callback: CallbackQuery) -> None:
+            if callback.data is None:
+                return
+            idx_str = callback.data.split(":", 1)[1]
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                return
+            await callback.answer("Loading hook details...")
+            if not self._hook_manager:
+                return
+            hooks = self._hook_manager.list_hooks()
+            if idx < 0 or idx >= len(hooks):
+                return
+            h = hooks[idx]
+            lines = [
+                f"🪝 *Hook #{idx + 1}*",
+                "",
+                f"*Event:* `{h['event']}`",
+                f"*Matcher:* `{h['matcher']}`",
+                f"*Name:* `{h['name']}`",
+                f"*Timeout:* {h['timeout']}s",
             ]
             if callback.message:
                 try:
@@ -576,6 +619,30 @@ class TelegramChannel:
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
         await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
+    async def _handle_hooks(self, message: TelegramMessage) -> None:
+        """Handle /hooks — list active SDK hooks with detail buttons."""
+        if not self._hook_manager:
+            await message.answer("No hooks configured.")
+            return
+
+        hooks = self._hook_manager.list_hooks()
+        if not hooks:
+            await message.answer("No hooks configured.")
+            return
+
+        lines = ["🪝 *Active Hooks*", ""]
+        buttons = []
+        for i, h in enumerate(hooks):
+            lines.append(f"• *{h['name']}* — `{h['event']}` ({h['matcher']})")
+            cb_data = f"hook:{i}"
+            buttons.append(
+                InlineKeyboardButton(text=f"ℹ️ {h['name'][:20]}", callback_data=cb_data)
+            )
+
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
+
     async def _handle_cost(self, message: TelegramMessage) -> None:
         """Handle /cost — show usage costs."""
         if message.chat is None or self._agent_service is None:
@@ -707,6 +774,7 @@ class TelegramChannel:
             BotCommand(command="cost", description="Show API usage costs"),
             BotCommand(command="model", description="Switch AI model"),
             BotCommand(command="skills", description="List available API skills"),
+            BotCommand(command="hooks", description="List active SDK hooks"),
         ]
         await self.bot.set_my_commands(commands)
 

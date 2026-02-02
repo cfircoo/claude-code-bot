@@ -16,6 +16,7 @@ from claude_code_bot.agent import AgentService
 from claude_code_bot.agents import SubAgentRegistry, load_sub_agents_from_config
 from claude_code_bot.channels.telegram import TelegramChannel
 from claude_code_bot.config import BotConfig, load_config
+from claude_code_bot.hooks import HookManager
 from claude_code_bot.logging import setup_logging
 from claude_code_bot.memory import ConversationStore
 from claude_code_bot.memory_store import MemoryStore
@@ -92,12 +93,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _permission_manager = PermissionManager(
         tools_requiring_approval=_config.tools_requiring_approval,
     )
+
+    # Build hook manager from config
+    hook_manager = HookManager()
+    if _config.hooks.file_guards:
+        hook_manager.add_file_guard(_config.hooks.file_guards)
+    if _config.hooks.command_guards:
+        hook_manager.add_command_guard(_config.hooks.command_guards)
+    if _config.hooks.auto_approve:
+        hook_manager.add_auto_approve(_config.hooks.auto_approve)
+    if _config.hooks.audit_log:
+        hook_manager.add_audit_logger()
+
     _agent_service = AgentService(
         config=_config,
         store=_store,
         registry=registry,
         memory_store=_memory_store,
         permission_manager=_permission_manager,
+        hook_manager=hook_manager if hook_manager.list_hooks() else None,
     )
 
     # Start Telegram if configured
@@ -111,6 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _telegram = TelegramChannel(
             bot_token=_config.api_keys.telegram_bot_token,
             config=_config,
+            hook_manager=hook_manager if hook_manager.list_hooks() else None,
         )
         _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
         _telegram.thinking_threshold = float(tg_settings.get("thinking_threshold", 10.0))

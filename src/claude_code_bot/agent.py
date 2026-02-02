@@ -21,7 +21,9 @@ from claude_code_bot.agents import SubAgentRegistry
 from claude_code_bot.config import BotConfig
 from claude_code_bot.memory import ConversationMeta, ConversationStore
 from claude_code_bot.memory_store import MemoryStore
+from claude_code_bot.hooks import HookManager
 from claude_code_bot.permissions import PermissionManager
+
 logger = structlog.get_logger()
 
 MAX_RETRIES = 3
@@ -38,12 +40,14 @@ class AgentService:
         registry: SubAgentRegistry,
         memory_store: MemoryStore | None = None,
         permission_manager: PermissionManager | None = None,
+        hook_manager: HookManager | None = None,
     ) -> None:
         self.config = config
         self.store = store
         self.registry = registry
         self.memory_store = memory_store
         self.permission_manager = permission_manager
+        self.hook_manager = hook_manager
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt from persona config."""
@@ -145,6 +149,8 @@ class AgentService:
             options.disallowed_tools = self.config.disallowed_tools
         if self.permission_manager:
             options.can_use_tool = self.permission_manager.make_callback()
+        if self.hook_manager:
+            options.hooks = self.hook_manager.build()
 
         if meta.session_id:
             options.resume = meta.session_id
