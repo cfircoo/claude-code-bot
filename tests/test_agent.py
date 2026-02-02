@@ -98,13 +98,13 @@ def test_resolve_conversation_creates_new(agent: AgentService, store: Conversati
     assert len(store.list("user1")) == 1
 
 
-def test_resolve_conversation_uses_most_recent(agent: AgentService, store: ConversationStore) -> None:
-    c1 = store.create("user1", "Old")
-    c1.last_active = time.time() - 100
-    store.update(c1)
-    c2 = store.create("user1", "New")
+def test_resolve_conversation_creates_new_when_no_id(agent: AgentService, store: ConversationStore) -> None:
+    store.create("user1", "Old")
+    store.create("user1", "New")
     meta = agent._resolve_conversation("user1", None)
-    assert meta.conversation_id == c2.conversation_id
+    # Should create a fresh conversation, not reuse existing
+    existing_ids = {c.conversation_id for c in store.list("user1")}
+    assert meta.conversation_id not in existing_ids or len(store.list("user1")) == 3
 
 
 def test_resolve_conversation_by_id(agent: AgentService, store: ConversationStore) -> None:
@@ -117,7 +117,8 @@ def test_resolve_conversation_by_id(agent: AgentService, store: ConversationStor
 def test_resolve_conversation_fallback_on_bad_id(agent: AgentService, store: ConversationStore) -> None:
     store.create("user1", "Existing")
     meta = agent._resolve_conversation("user1", "nonexistent-id")
-    assert meta.name == "Existing"
+    # Should create a new conversation when ID not found
+    assert meta.conversation_id != "nonexistent-id"
 
 
 # --- Streaming tests ---

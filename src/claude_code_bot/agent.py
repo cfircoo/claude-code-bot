@@ -18,11 +18,11 @@ from claude_agent_sdk import (
 from claude_agent_sdk.types import StreamEvent
 
 from claude_code_bot.agents import SubAgentRegistry
-from claude_code_bot.config import BotConfig
+from claude_code_bot.config import BotConfig, UserRestrictions
 from claude_code_bot.memory import ConversationMeta, ConversationStore
 from claude_code_bot.memory_store import MemoryStore
 from claude_code_bot.hooks import HookManager
-from claude_code_bot.permissions import PermissionManager
+from claude_code_bot.permissions import PermissionManager, make_restricted_callback
 
 logger = structlog.get_logger()
 
@@ -88,15 +88,16 @@ class AgentService:
     def _resolve_conversation(
         self, user_id: str, conversation_id: str | None
     ) -> ConversationMeta:
-        """Get the target conversation, using most recent or auto-creating."""
+        """Get the target conversation or create a new one.
+
+        Only reuses an existing conversation when an explicit conversation_id
+        is provided. Otherwise a fresh conversation is created every time so
+        that the SDK session starts clean and the system prompt is up-to-date.
+        """
         if conversation_id:
             meta = self.store.get(user_id, conversation_id)
             if meta:
                 return meta
-
-        convos = self.store.list(user_id)
-        if convos:
-            return max(convos, key=lambda c: c.last_active)
 
         return self.store.create(user_id)
 
@@ -106,6 +107,7 @@ class AgentService:
         message: str,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        restrictions: UserRestrictions | None = None,
     ) -> AsyncGenerator[dict[str, str], None]:
         """Process a message and yield streaming events.
 
@@ -149,6 +151,12 @@ class AgentService:
             options.disallowed_tools = self.config.disallowed_tools
         if self.permission_manager:
             options.can_use_tool = self.permission_manager.make_callback()
+        if restrictions:
+            if restrictions.allowed_tools:
+                options.allowed_tools = restrictions.allowed_tools
+            options.can_use_tool = make_restricted_callback(
+                restrictions, base_callback=options.can_use_tool
+            )
         if self.hook_manager:
             options.hooks = self.hook_manager.build()
 

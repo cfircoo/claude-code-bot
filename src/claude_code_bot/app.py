@@ -173,23 +173,40 @@ async def health() -> dict[str, str]:
 @app.post("/chat/stream")
 async def chat_stream(request: Request, body: ChatStreamRequest) -> StreamingResponse:
     """SSE endpoint that streams events from chat_stream()."""
-    api_key = _get_http_api_key()
-    if api_key:
-        provided_key = request.headers.get("X-API-Key", "")
-        if provided_key != api_key:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    if _agent_service is None:
+    if _agent_service is None or _config is None:
         raise HTTPException(status_code=503, detail="Bot not initialized")
+
+    # Resolve HTTP restrictions based on API key
+    from claude_code_bot.config import UserRestrictions
+
+    api_key = _get_http_api_key()
+    provided_key = request.headers.get("X-API-Key", "")
+    restrictions: UserRestrictions | None = None
+
+    if api_key and provided_key == api_key:
+        pass  # authenticated — full access
+    elif _config.security.http.deny_unauthenticated:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        restrictions = _config.security.http.default_restrictions
+
+    authenticated = api_key is not None and provided_key == api_key
+    metadata = {
+        "channel": "http",
+        "authenticated": authenticated,
+        "user_id": body.user_id,
+    }
 
     async def event_generator() -> AsyncGenerator[str, None]:
         async for event in _agent_service.chat_stream(
             user_id=body.user_id,
             message=body.message,
             conversation_id=body.conversation_id,
+            metadata=metadata,
+            restrictions=restrictions,
         ):
             yield f"data: {json.dumps(event)}\n\n"
 

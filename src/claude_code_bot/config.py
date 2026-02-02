@@ -50,14 +50,19 @@ class ApiKeysConfig(BaseModel):
     telegram_bot_token: str = ""
 
 
-class AllowedUser(BaseModel):
+class UserRestrictions(BaseModel):
+    """Shared tool and path restrictions for any channel."""
+
+    allowed_tools: list[str] = Field(default_factory=list)
+    writable_paths: list[str] = Field(default_factory=list)
+    readable_paths: list[str] = Field(default_factory=list)
+
+
+class AllowedUser(UserRestrictions):
     """An authorized Telegram user with per-user permissions."""
 
     user_id: int
     username: str
-    allowed_tools: list[str] = Field(default_factory=list)
-    writable_paths: list[str] = Field(default_factory=list)
-    readable_paths: list[str] = Field(default_factory=list)
 
 
 class TelegramSecurityConfig(BaseModel):
@@ -67,10 +72,18 @@ class TelegramSecurityConfig(BaseModel):
     deny_message: str = "You are not authorized to use this bot."
 
 
+class HttpSecurityConfig(BaseModel):
+    """HTTP channel security settings."""
+
+    default_restrictions: UserRestrictions | None = None
+    deny_unauthenticated: bool = False
+
+
 class SecurityConfig(BaseModel):
     """Security configuration."""
 
     telegram: TelegramSecurityConfig = Field(default_factory=TelegramSecurityConfig)
+    http: HttpSecurityConfig = Field(default_factory=HttpSecurityConfig)
 
 
 class HooksConfig(BaseModel):
@@ -119,6 +132,13 @@ def _apply_env_overrides(config: BotConfig) -> BotConfig:
     env_log_level = os.environ.get("LOG_LEVEL")
     if env_log_level:
         config.log_level = env_log_level
+
+    env_http_key = os.environ.get("HTTP_API_KEY")
+    if env_http_key:
+        for ch in config.channels:
+            if ch.type == "http":
+                ch.settings["api_key"] = env_http_key
+                break
 
     return config
 

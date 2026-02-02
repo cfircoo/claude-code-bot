@@ -36,6 +36,7 @@ BOT_COMMANDS = {
     "/model": "Switch AI model",
     "/skills": "List available API skills",
     "/hooks": "List active SDK hooks",
+    "/sessions": "Manage sessions (list or new)",
 }
 
 # SDK built-in commands (forwarded to SDK as prompt)
@@ -105,6 +106,7 @@ class TelegramChannel:
         self.config = config
         self._agent_service: AgentService | None = None
         self._known_chat_ids: set[int] = set()
+        self._chat_conversations: dict[int, str] = {}  # chat_id -> conversation_id
         self._greeted_users: set[int] = set()
         self._start_time: float = __import__("time").time()
         self.show_tool_activity: bool = False
@@ -208,11 +210,20 @@ class TelegramChannel:
         thinking_task = asyncio.create_task(_send_thinking())
 
         metadata = self._extract_metadata(message)
+        # Add authentication status based on auth guard
+        if self._auth_guard and message.from_user:
+            metadata["authenticated"] = self._auth_guard.is_authorized(
+                message.from_user.id, message.from_user.username
+            )
+        else:
+            metadata["authenticated"] = not bool(self._auth_guard)
         logger.debug("telegram_message_received", user_message=user_message, **metadata)
 
         try:
+            conversation_id = self._chat_conversations.get(chat_id)
             async for event in self._agent_service.chat_stream(
-                user_id=str(chat_id), message=user_message, metadata=metadata
+                user_id=str(chat_id), message=user_message,
+                conversation_id=conversation_id, metadata=metadata,
             ):
                 event_type = event.get("type", "")
 
@@ -224,7 +235,10 @@ class TelegramChannel:
                     tool_activities.append(event.get("tool", ""))
                 elif event_type == "result":
                     usage_info = event.get("usage", {})
-                    usage_info["conversation_id"] = event.get("conversation_id", "")
+                    cid = event.get("conversation_id", "")
+                    usage_info["conversation_id"] = cid
+                    if cid:
+                        self._chat_conversations[chat_id] = cid
                 elif event_type == "conversation_switched":
                     cid = event.get("conversation_id", "")
                     tool_activities.append(f"Switched to conversation {cid}")
@@ -331,6 +345,9 @@ class TelegramChannel:
                     return
                 if cmd == "/hooks":
                     await self._handle_hooks(message)
+                    return
+                if cmd == "/sessions":
+                    await self._handle_session(message)
                     return
 
                 # SDK commands — forward to agent as-is
@@ -473,6 +490,38 @@ class TelegramChannel:
                     )
                 except Exception:
                     pass
+
+        @self.dp.callback_query(F.data.startswith("session:"))
+        async def handle_session_callback(callback: CallbackQuery) -> None:
+            if callback.data is None or not _check_callback_auth(callback):
+                return
+            action = callback.data.split(":", 1)[1]
+            chat_id = callback.message.chat.id if callback.message and callback.message.chat else None
+            if not chat_id:
+                return
+
+            if action == "new":
+                self._chat_conversations.pop(chat_id, None)
+                await callback.answer("New session started")
+                if callback.message:
+                    try:
+                        await callback.message.edit_text(  # type: ignore[union-attr]
+                            "New session started. Send a message to begin."
+                        )
+                    except Exception:
+                        pass
+            elif action.startswith("switch:"):
+                conv_id = action.split(":", 1)[1]
+                self._chat_conversations[chat_id] = conv_id
+                await callback.answer(f"Switched to {conv_id[:8]}...")
+                if callback.message:
+                    try:
+                        await callback.message.edit_text(  # type: ignore[union-attr]
+                            f"Switched to session `{conv_id[:8]}...`",
+                            parse_mode="Markdown",
+                        )
+                    except Exception:
+                        pass
 
     async def send_proactive_message(self, user_id: str, text: str) -> None:
         """Send a message to a user without a prior trigger.
@@ -673,6 +722,46 @@ class TelegramChannel:
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
         await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
+    async def _handle_session(self, message: TelegramMessage) -> None:
+        """Handle /session — list sessions or start new."""
+        if message.chat is None or self._agent_service is None:
+            await message.answer("Bot not ready.")
+            return
+
+        chat_id = message.chat.id
+        store = self._agent_service.store
+        convos = store.list(str(chat_id))
+        current_cid = self._chat_conversations.get(chat_id)
+
+        lines = ["📋 *Sessions*", ""]
+        buttons: list[list[InlineKeyboardButton]] = []
+
+        # New session button
+        buttons.append([
+            InlineKeyboardButton(text="➕ New Session", callback_data="session:new")
+        ])
+
+        if convos:
+            # Sort by last_active descending, show recent 10
+            recent = sorted(convos, key=lambda c: c.last_active, reverse=True)[:10]
+            for c in recent:
+                short_id = c.conversation_id[:8]
+                name = c.name or short_id
+                active = " ✅" if c.conversation_id == current_cid else ""
+                msgs = c.message_count
+                lines.append(f"• `{short_id}` — {name} ({msgs} msgs){active}")
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{'✅ ' if c.conversation_id == current_cid else ''}{name[:25]}",
+                        callback_data=f"session:switch:{c.conversation_id}",
+                    )
+                ])
+        else:
+            lines.append("No sessions yet.")
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
+
     async def _handle_cost(self, message: TelegramMessage) -> None:
         """Handle /cost — show usage costs."""
         if message.chat is None or self._agent_service is None:
@@ -805,6 +894,7 @@ class TelegramChannel:
             BotCommand(command="model", description="Switch AI model"),
             BotCommand(command="skills", description="List available API skills"),
             BotCommand(command="hooks", description="List active SDK hooks"),
+            BotCommand(command="sessions", description="Manage sessions"),
         ]
         await self.bot.set_my_commands(commands)
 

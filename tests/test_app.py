@@ -67,8 +67,9 @@ async def test_chat_stream_empty_message(client, setup_app) -> None:
 @pytest.mark.asyncio
 async def test_chat_stream_unauthorized(client, setup_app) -> None:
     config, _, _ = setup_app
-    from claude_code_bot.config import ChannelConfig
+    from claude_code_bot.config import ChannelConfig, HttpSecurityConfig
     config.channels = [ChannelConfig(type="http", settings={"api_key": "secret"})]
+    config.security.http = HttpSecurityConfig(deny_unauthenticated=True)
 
     resp = await client.post(
         "/chat/stream",
@@ -82,7 +83,7 @@ async def test_chat_stream_unauthorized(client, setup_app) -> None:
 async def test_chat_stream_success(client, setup_app) -> None:
     _, mock_agent, _ = setup_app
 
-    async def fake_stream(user_id, message, conversation_id=None):
+    async def fake_stream(user_id, message, conversation_id=None, metadata=None, restrictions=None):
         yield {"type": "text", "content": "hello"}
         yield {"type": "result", "session_id": "s1"}
 

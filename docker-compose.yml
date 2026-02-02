@@ -14,3 +14,4 @@ services:
       - CONFIG_PATH=/app/config.yaml
    #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - HTTP_API_KEY=${HTTP_API_KEY:-}

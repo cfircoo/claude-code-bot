@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from uuid import uuid4
 
 import structlog
@@ -12,6 +12,11 @@ from claude_agent_sdk.types import (
     PermissionResultDeny,
     ToolPermissionContext,
 )
+
+from claude_code_bot.hooks.telegram_auth import _match_any
+
+if TYPE_CHECKING:
+    from claude_code_bot.config import UserRestrictions
 
 logger = structlog.get_logger()
 
@@ -111,3 +116,48 @@ class PermissionManager:
             return PermissionResultDeny(message="User denied permission")
 
         return can_use_tool
+
+
+def make_restricted_callback(
+    restrictions: UserRestrictions,
+    base_callback: Callable[
+        [str, dict[str, Any], ToolPermissionContext],
+        Awaitable[PermissionResultAllow | PermissionResultDeny],
+    ]
+    | None = None,
+) -> Callable[
+    [str, dict[str, Any], ToolPermissionContext],
+    Awaitable[PermissionResultAllow | PermissionResultDeny],
+]:
+    """Create a can_use_tool callback that enforces UserRestrictions.
+
+    Checks allowed_tools, writable_paths, readable_paths before delegating
+    to an optional base_callback.
+    """
+
+    async def can_use_tool(
+        tool_name: str,
+        tool_input: dict[str, Any],
+        context: ToolPermissionContext,
+    ) -> PermissionResultAllow | PermissionResultDeny:
+        # Tool allowlist
+        if restrictions.allowed_tools and tool_name not in restrictions.allowed_tools:
+            return PermissionResultDeny(message=f"Tool '{tool_name}' not allowed")
+
+        # Writable path check for Write/Edit
+        if tool_name in ("Write", "Edit") and restrictions.writable_paths:
+            path = tool_input.get("file_path", "")
+            if not _match_any(path, restrictions.writable_paths):
+                return PermissionResultDeny(message=f"Write to '{path}' not allowed")
+
+        # Readable path check for Read
+        if tool_name == "Read" and restrictions.readable_paths:
+            path = tool_input.get("file_path", "")
+            if not _match_any(path, restrictions.readable_paths):
+                return PermissionResultDeny(message=f"Read from '{path}' not allowed")
+
+        if base_callback:
+            return await base_callback(tool_name, tool_input, context)
+        return PermissionResultAllow()
+
+    return can_use_tool
