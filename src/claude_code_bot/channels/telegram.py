@@ -32,6 +32,7 @@ BOT_COMMANDS = {
     "/commands": "Show all available commands",
     "/cost": "Show API usage costs",
     "/model": "Switch AI model",
+    "/skills": "List available API skills",
 }
 
 # SDK built-in commands (forwarded to SDK as prompt)
@@ -297,6 +298,9 @@ class TelegramChannel:
                 if cmd in ("/model", "/models"):
                     await self._handle_model(message)
                     return
+                if cmd == "/skills":
+                    await self._handle_skills(message)
+                    return
 
                 # SDK commands — forward to agent as-is
                 if cmd in SDK_COMMANDS:
@@ -331,6 +335,47 @@ class TelegramChannel:
                     await callback.message.edit_text(  # type: ignore[union-attr]
                         f"Model switched to `{model_id}`",
                         parse_mode="Markdown",
+                    )
+                except Exception:
+                    pass
+
+        @self.dp.callback_query(F.data.startswith("skill:"))
+        async def handle_skill_callback(callback: CallbackQuery) -> None:
+            if callback.data is None:
+                return
+            skill_id = callback.data.split(":", 1)[1]
+            await callback.answer("Loading skill details...")
+            skill = await self._fetch_skill(skill_id)
+            if not skill:
+                if callback.message:
+                    try:
+                        await callback.message.answer("Could not fetch skill details.")  # type: ignore[union-attr]
+                    except Exception:
+                        pass
+                return
+            title = skill.get("display_title", skill.get("id", "?"))
+            source = skill.get("source", "unknown")
+            version = skill.get("latest_version", "—")
+            created = skill.get("created_at", "—")
+            updated = skill.get("updated_at", "—")
+            # Format timestamps (trim to date)
+            if created and "T" in created:
+                created = created.split("T")[0]
+            if updated and "T" in updated:
+                updated = updated.split("T")[0]
+            lines = [
+                f"🛠 *{title}*",
+                "",
+                f"*ID:* `{skill.get('id', '—')}`",
+                f"*Source:* {source}",
+                f"*Version:* `{version}`",
+                f"*Created:* {created}",
+                f"*Updated:* {updated}",
+            ]
+            if callback.message:
+                try:
+                    await callback.message.answer(  # type: ignore[union-attr]
+                        "\n".join(lines), parse_mode="Markdown"
                     )
                 except Exception:
                     pass
@@ -449,6 +494,87 @@ class TelegramChannel:
         model_id = models.get(choice, DEFAULT_MODELS.get(choice, choice))
         self.config.model = model_id
         await message.answer(f"Model switched to `{model_id}`", parse_mode="Markdown")
+
+    async def _fetch_skills(self) -> list[dict]:
+        """Fetch available skills from Anthropic API."""
+        import httpx
+
+        api_key = (
+            self.config.api_keys.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        if not api_key:
+            return []
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://api.anthropic.com/v1/skills",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-beta": "skills-2025-10-02",
+                    },
+                    params={"limit": 100},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                return resp.json().get("data", [])
+        except Exception:
+            logger.debug("skills_api_fetch_failed", exc_info=True)
+            return []
+
+    async def _fetch_skill(self, skill_id: str) -> dict | None:
+        """Fetch a single skill by ID from the Anthropic API."""
+        import httpx
+
+        api_key = (
+            self.config.api_keys.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        if not api_key:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.anthropic.com/v1/skills/{skill_id}",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-beta": "skills-2025-10-02",
+                    },
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except Exception:
+            logger.debug("skill_api_fetch_failed", skill_id=skill_id, exc_info=True)
+            return None
+
+    async def _handle_skills(self, message: TelegramMessage) -> None:
+        """Handle /skills — list available API skills with detail buttons."""
+        skills = await self._fetch_skills()
+        if not skills:
+            await message.answer("No skills found (API key may be missing or no skills available).")
+            return
+
+        lines = ["🛠 *Available Skills*", ""]
+        buttons = []
+        for s in skills:
+            title = s.get("display_title", s.get("id", "?"))
+            source = s.get("source", "")
+            tag = f" ({source})" if source else ""
+            lines.append(f"• *{title}*{tag}")
+            skill_id = s.get("id", "")
+            cb_data = f"skill:{skill_id}"
+            if skill_id and len(cb_data) <= 64:
+                buttons.append(InlineKeyboardButton(text=f"ℹ️ {title}", callback_data=cb_data))
+
+        # 2 buttons per row
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
     async def _handle_cost(self, message: TelegramMessage) -> None:
         """Handle /cost — show usage costs."""
@@ -580,6 +706,7 @@ class TelegramChannel:
             BotCommand(command="clear", description="Reset conversation"),
             BotCommand(command="cost", description="Show API usage costs"),
             BotCommand(command="model", description="Switch AI model"),
+            BotCommand(command="skills", description="List available API skills"),
         ]
         await self.bot.set_my_commands(commands)
 
