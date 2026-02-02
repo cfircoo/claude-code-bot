@@ -17,6 +17,7 @@ from claude_code_bot.agents import SubAgentRegistry, load_sub_agents_from_config
 from claude_code_bot.channels.telegram import TelegramChannel
 from claude_code_bot.config import BotConfig, load_config
 from claude_code_bot.hooks import HookManager
+from claude_code_bot.hooks.telegram_auth import TelegramAuthGuard
 from claude_code_bot.logging import setup_logging
 from claude_code_bot.memory import ConversationStore
 from claude_code_bot.memory_store import MemoryStore
@@ -104,6 +105,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         hook_manager.add_auto_approve(_config.hooks.auto_approve)
     if _config.hooks.audit_log:
         hook_manager.add_audit_logger()
+    if _config.hooks.damage_control:
+        hook_manager.add_damage_control(
+            _config.hooks.damage_control_patterns or None
+        )
 
     _agent_service = AgentService(
         config=_config,
@@ -129,6 +134,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         _telegram.show_tool_activity = tg_settings.get("show_tool_activity", False)
         _telegram.thinking_threshold = float(tg_settings.get("thinking_threshold", 10.0))
+        if _config.security.telegram.allowed_users:
+            _telegram.set_auth_guard(
+                TelegramAuthGuard(
+                    _config.security.telegram.allowed_users,
+                    deny_message=_config.security.telegram.deny_message,
+                )
+            )
         if _permission_manager:
             _telegram.set_permission_manager(_permission_manager)
         _telegram.set_agent_service(_agent_service)

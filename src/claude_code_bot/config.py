@@ -50,6 +50,29 @@ class ApiKeysConfig(BaseModel):
     telegram_bot_token: str = ""
 
 
+class AllowedUser(BaseModel):
+    """An authorized Telegram user with per-user permissions."""
+
+    user_id: int
+    username: str
+    allowed_tools: list[str] = Field(default_factory=list)
+    writable_paths: list[str] = Field(default_factory=list)
+    readable_paths: list[str] = Field(default_factory=list)
+
+
+class TelegramSecurityConfig(BaseModel):
+    """Telegram-specific security settings."""
+
+    allowed_users: list[AllowedUser] = Field(default_factory=list)
+    deny_message: str = "You are not authorized to use this bot."
+
+
+class SecurityConfig(BaseModel):
+    """Security configuration."""
+
+    telegram: TelegramSecurityConfig = Field(default_factory=TelegramSecurityConfig)
+
+
 class HooksConfig(BaseModel):
     """Hook configuration for SDK hooks."""
 
@@ -57,6 +80,8 @@ class HooksConfig(BaseModel):
     command_guards: list[str] = Field(default_factory=list)
     auto_approve: list[str] = Field(default_factory=list)
     audit_log: bool = False
+    damage_control: bool = False
+    damage_control_patterns: str = ""
 
 
 class BotConfig(BaseModel):
@@ -68,6 +93,7 @@ class BotConfig(BaseModel):
     channels: list[ChannelConfig] = Field(default_factory=list)
     agents: dict[str, SubAgentConfig] = Field(default_factory=dict)
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
     hooks: HooksConfig = Field(default_factory=HooksConfig)
     model: str = "claude-sonnet-4-20250514"
     max_turns: int = 10

@@ -1,0 +1,260 @@
+# Claude Code Bot — Damage Control Patterns
+# ==========================================
+# Security patterns for the SDK hook system.
+# Loaded by HookManager.add_damage_control()
+
+# ---------------------------------------------------------------------------
+# BASH TOOL PATTERNS — regex matched against Bash commands
+# ---------------------------------------------------------------------------
+bashToolPatterns:
+  # DESTRUCTIVE FILE OPERATIONS
+  - pattern: '\brm\s+(-[^\s]*)*-[rRf]'
+    reason: rm with recursive or force flags
+  - pattern: '\brm\s+--recursive'
+    reason: rm with --recursive flag
+  - pattern: '\brm\s+--force'
+    reason: rm with --force flag
+  - pattern: '\bsudo\s+rm\b'
+    reason: sudo rm
+  - pattern: '\brmdir\s+--ignore-fail-on-non-empty'
+    reason: rmdir ignore-fail
+
+  # PERMISSION CHANGES
+  - pattern: '\bchmod\s+(-[^\s]+\s+)*777\b'
+    reason: chmod 777 (world writable)
+  - pattern: '\bchmod\s+-[Rr].*777'
+    reason: recursive chmod 777
+  - pattern: '\bchown\s+-[Rr].*\broot\b'
+    reason: recursive chown to root
+
+  # GIT DESTRUCTIVE
+  - pattern: '\bgit\s+reset\s+--hard\b'
+    reason: git reset --hard (use --soft or stash)
+  - pattern: '\bgit\s+clean\s+(-[^\s]*)*-[fd]'
+    reason: git clean with force/directory flags
+  - pattern: '\bgit\s+push\s+.*--force(?!-with-lease)'
+    reason: git push --force (use --force-with-lease)
+  - pattern: '\bgit\s+push\s+(-[^\s]*)*-f\b'
+    reason: git push -f (use --force-with-lease)
+  - pattern: '^git\s+push\b.*\b(origin|upstream)\s+(main|master)\b'
+    reason: Pushing directly to main/master
+  - pattern: '^git\s+push\s*$'
+    reason: Bare git push — specify remote and branch
+  - pattern: '\bgit\s+stash\s+clear\b'
+    reason: git stash clear (deletes ALL stashes)
+  - pattern: '\bgit\s+filter-branch\b'
+    reason: git filter-branch (rewrites history)
+
+  # GIT — REQUIRE CONFIRMATION
+  - pattern: '\bgit\s+checkout\s+--\s*\.'
+    reason: Discards all uncommitted changes
+    ask: true
+  - pattern: '\bgit\s+restore\s+\.'
+    reason: Discards all uncommitted changes
+    ask: true
+  - pattern: '\bgit\s+stash\s+drop\b'
+    reason: Permanently deletes a stash
+    ask: true
+  - pattern: '\bgit\s+branch\s+(-[^\s]*)*-D'
+    reason: Force deletes branch (even if unmerged)
+    ask: true
+  - pattern: '\bgit\s+push\s+\S+\s+--delete\b'
+    reason: Deletes remote branch
+    ask: true
+
+  # SYSTEM DESTRUCTION
+  - pattern: '\bmkfs\.'
+    reason: filesystem format command
+  - pattern: '\bdd\s+.*of=/dev/'
+    reason: dd writing to device
+  - pattern: '\bkill\s+-9\s+-1\b'
+    reason: kill all processes
+  - pattern: '\bkillall\s+-9\b'
+    reason: killall -9
+
+  # ENV EXPOSURE
+  - pattern: '\bprintenv\b'
+    reason: printenv exposes environment variables
+  - pattern: '\benv\b(?!\s+\S+=)'
+    reason: env exposes environment variables
+  - pattern: '\bexport\s+-p\b'
+    reason: export -p exposes all exported variables
+
+  # DOCKER DESTRUCTIVE
+  - pattern: '\bdocker\s+system\s+prune\s+.*-a'
+    reason: docker system prune -a (removes all unused data)
+  - pattern: '\bdocker\s+volume\s+rm\b'
+    reason: docker volume rm (data loss)
+  - pattern: '\bdocker\s+volume\s+prune\b'
+    reason: docker volume prune
+
+  # DATABASE DESTRUCTIVE
+  - pattern: '\bredis-cli\s+FLUSHALL'
+    reason: redis-cli FLUSHALL (wipes ALL data)
+  - pattern: '\bdropdb\b'
+    reason: PostgreSQL dropdb
+  - pattern: 'DELETE\s+FROM\s+\w+\s*;'
+    reason: DELETE without WHERE clause
+  - pattern: 'DELETE\s+FROM\s+\w+\s*$'
+    reason: DELETE without WHERE clause
+  - pattern: '\bTRUNCATE\s+TABLE\b'
+    reason: TRUNCATE TABLE
+  - pattern: '\bDROP\s+TABLE\b'
+    reason: DROP TABLE
+  - pattern: '\bDROP\s+DATABASE\b'
+    reason: DROP DATABASE
+
+  # SQL — REQUIRE CONFIRMATION
+  - pattern: '\bDELETE\s+FROM\s+\w+\s+WHERE\b.*\bid\s*='
+    reason: SQL DELETE with specific ID
+    ask: true
+
+  # INFRASTRUCTURE
+  - pattern: '\bterraform\s+destroy\b'
+    reason: terraform destroy
+  - pattern: '\bpulumi\s+destroy\b'
+    reason: pulumi destroy
+  - pattern: '\bgh\s+repo\s+delete\b'
+    reason: gh repo delete
+  - pattern: '\bnpm\s+unpublish\b'
+    reason: npm unpublish
+
+  # CLOUD — AWS
+  - pattern: '\baws\s+s3\s+rm\s+.*--recursive'
+    reason: aws s3 rm --recursive
+  - pattern: '\baws\s+ec2\s+terminate-instances\b'
+    reason: aws ec2 terminate-instances
+  - pattern: '\baws\s+rds\s+delete-db-instance\b'
+    reason: aws rds delete-db-instance
+
+  # CLOUD — GCP
+  - pattern: '\bgcloud\s+projects\s+delete\b'
+    reason: gcloud projects delete
+  - pattern: '\bgcloud\s+compute\s+instances\s+delete\b'
+    reason: gcloud compute instances delete
+
+  # CLOUD — FIREBASE
+  - pattern: '\bfirebase\s+projects:delete\b'
+    reason: firebase projects:delete
+  - pattern: '\bfirebase\s+firestore:delete\s+.*--all-collections'
+    reason: firebase firestore:delete --all-collections
+
+# ---------------------------------------------------------------------------
+# ZERO ACCESS PATHS — block ALL operations (read/write/edit/bash)
+# ---------------------------------------------------------------------------
+zeroAccessPaths:
+  # Environment files
+  - ".env"
+  - ".env.*"
+  - ".env*.local"
+  - "*.env"
+
+  # SSH / GPG
+  - "~/.ssh/"
+  - "~/.gnupg/"
+
+  # Cloud credentials
+  - "~/.aws/"
+  - "~/.config/gcloud/"
+  - "~/.azure/"
+  - "~/.docker/"
+  - "*-credentials.json"
+  - "*serviceAccount*.json"
+
+  # Certificates
+  - "*.pem"
+  - "*.key"
+  - "*.p12"
+  - "*.pfx"
+
+  # Terraform state
+  - "*.tfstate"
+  - "*.tfstate.backup"
+  - ".terraform/"
+
+  # Platform tokens
+  - ".vercel/"
+  - ".netlify/"
+  - ".supabase/"
+
+  # Auth files
+  - "~/.netrc"
+  - "~/.npmrc"
+  - "~/.pypirc"
+  - "~/.git-credentials"
+
+  # Database dumps
+  - "dump.sql"
+  - "backup.sql"
+  - "*.dump"
+
+# ---------------------------------------------------------------------------
+# READ-ONLY PATHS — can read, but not write/edit/delete
+# ---------------------------------------------------------------------------
+readOnlyPaths:
+  # System
+  - /etc/
+  - /usr/
+  - /bin/
+  - /sbin/
+
+  # Shell config
+  - ~/.bashrc
+  - ~/.zshrc
+  - ~/.profile
+  - ~/.bash_history
+  - ~/.zsh_history
+
+  # Lock files
+  - "package-lock.json"
+  - "yarn.lock"
+  - "pnpm-lock.yaml"
+  - "poetry.lock"
+  - "Pipfile.lock"
+  - "Cargo.lock"
+  - "go.sum"
+  - "uv.lock"
+  - "*.lock"
+
+  # Build artifacts
+  - "*.min.js"
+  - "*.min.css"
+  - dist/
+  - build/
+  - node_modules/
+  - __pycache__/
+  - .venv/
+
+# ---------------------------------------------------------------------------
+# NO-DELETE PATHS — can read/write/edit, but not delete
+# ---------------------------------------------------------------------------
+noDeletePaths:
+  # Claude config
+  - ~/.claude/
+  - CLAUDE.md
+
+  # Legal
+  - "LICENSE"
+  - "LICENSE.*"
+  - "COPYING"
+
+  # Docs
+  - "README.md"
+  - "README.*"
+  - "CONTRIBUTING.md"
+  - "CHANGELOG.md"
+
+  # Git
+  - .git/
+  - .gitignore
+  - .gitattributes
+
+  # CI/CD
+  - .github/
+  - .gitlab-ci.yml
+
+  # Docker
+  - Dockerfile
+  - "Dockerfile.*"
+  - docker-compose.yml
+  - "docker-compose.*.yml"

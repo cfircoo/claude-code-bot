@@ -29,7 +29,7 @@ def manager() -> HookManager:
 @pytest.fixture
 def mock_hook_matcher():
     """Mock the HookMatcher import."""
-    with patch("claude_code_bot.hooks.HookMatcher", MockHookMatcher):
+    with patch("claude_code_bot.hooks.manager.HookMatcher", MockHookMatcher):
         yield MockHookMatcher
 
 
@@ -273,8 +273,8 @@ class TestFileGuard:
     """Test add_file_guard() blocks matching files, allows non-matching."""
 
     async def test_file_guard_blocks_exact_match(self, manager: HookManager) -> None:
-        """Test file guard blocks exact filename match."""
-        manager.add_file_guard([".env"])
+        """Test file guard blocks exact filename match using glob pattern."""
+        manager.add_file_guard(["*.env"])
         hooks = manager._hooks["PreToolUse"]
         guard_callback = hooks[0][1]
 
@@ -285,7 +285,7 @@ class TestFileGuard:
         result = await guard_callback(input_data, None, None)
         assert "hookSpecificOutput" in result
         assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert ".env" in result["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "*.env" in result["hookSpecificOutput"]["permissionDecisionReason"]
 
     async def test_file_guard_blocks_glob_pattern(self, manager: HookManager) -> None:
         """Test file guard blocks glob pattern match."""
@@ -443,7 +443,7 @@ class TestAuditLogger:
         manager.add_audit_logger()
         pre_hook = manager._hooks["PreToolUse"][0][1]
 
-        with patch("claude_code_bot.hooks.logger.info") as mock_log:
+        with patch("claude_code_bot.hooks.audit_logger.logger.info") as mock_log:
             input_data = {
                 "tool_name": "Read",
                 "tool_input": {"file_path": "/tmp/test.txt"},
@@ -460,7 +460,7 @@ class TestAuditLogger:
         manager.add_audit_logger()
         post_hook = manager._hooks["PostToolUse"][0][1]
 
-        with patch("claude_code_bot.hooks.logger.info") as mock_log:
+        with patch("claude_code_bot.hooks.audit_logger.logger.info") as mock_log:
             input_data = {"tool_name": "Write"}
             await post_hook(input_data, "tool-456", None)
             mock_log.assert_called_once()

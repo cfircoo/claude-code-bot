@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from claude_code_bot.agent import AgentService
     from claude_code_bot.config import BotConfig
     from claude_code_bot.hooks import HookManager
+    from claude_code_bot.hooks.telegram_auth import TelegramAuthGuard
     from claude_code_bot.permissions import PermissionManager
 
 logger = structlog.get_logger()
@@ -110,12 +111,17 @@ class TelegramChannel:
         self.thinking_threshold: float = 10.0
         self._permission_manager: PermissionManager | None = None
         self._hook_manager: HookManager | None = hook_manager
+        self._auth_guard: TelegramAuthGuard | None = None
 
         self._register_handlers()
 
     def set_agent_service(self, agent_service: AgentService) -> None:
         """Set the agent service for processing messages."""
         self._agent_service = agent_service
+
+    def set_auth_guard(self, guard: TelegramAuthGuard) -> None:
+        """Set the auth guard for user authorization."""
+        self._auth_guard = guard
 
     def set_permission_manager(self, manager: PermissionManager) -> None:
         """Set the permission manager and register as notifier."""
@@ -281,6 +287,20 @@ class TelegramChannel:
         async def handle_text(message: TelegramMessage) -> None:
             if message.chat is None or message.text is None:
                 return
+
+            # Auth check — block unauthorized users
+            if self._auth_guard and message.from_user:
+                if not self._auth_guard.is_authorized(
+                    message.from_user.id, message.from_user.username
+                ):
+                    logger.warning(
+                        "telegram_unauthorized",
+                        user_id=message.from_user.id,
+                        username=message.from_user.username,
+                    )
+                    await message.answer(self._auth_guard.deny_message)
+                    return
+
             chat_id = message.chat.id
             self._known_chat_ids.add(chat_id)
 
@@ -334,9 +354,19 @@ class TelegramChannel:
 
             await self._process_with_streaming(chat_id, text, message)
 
+        def _check_callback_auth(callback: CallbackQuery) -> bool:
+            """Return True if user is authorized (or no guard set)."""
+            if not self._auth_guard:
+                return True
+            if callback.from_user:
+                return self._auth_guard.is_authorized(
+                    callback.from_user.id, callback.from_user.username
+                )
+            return False
+
         @self.dp.callback_query(F.data.startswith("model:"))
         async def handle_model_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             model_id = callback.data.split(":", 1)[1]
             self.config.model = model_id
@@ -352,7 +382,7 @@ class TelegramChannel:
 
         @self.dp.callback_query(F.data.startswith("skill:"))
         async def handle_skill_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             skill_id = callback.data.split(":", 1)[1]
             await callback.answer("Loading skill details...")
@@ -393,7 +423,7 @@ class TelegramChannel:
 
         @self.dp.callback_query(F.data.startswith("hook:"))
         async def handle_hook_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             idx_str = callback.data.split(":", 1)[1]
             try:
@@ -425,7 +455,7 @@ class TelegramChannel:
 
         @self.dp.callback_query(F.data.startswith("perm:"))
         async def handle_permission_callback(callback: CallbackQuery) -> None:
-            if callback.data is None:
+            if callback.data is None or not _check_callback_auth(callback):
                 return
             parts = callback.data.split(":", 2)
             if len(parts) != 3:

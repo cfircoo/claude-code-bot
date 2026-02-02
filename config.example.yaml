@@ -44,11 +44,42 @@ agents: {}
   #   description: "Handles example tasks"
   #   timeout: 30
 
+security:
+  telegram:
+    # Restrict bot access to specific Telegram users.
+    # Both user_id AND username must match. Empty list = allow everyone.
+    # Per-user permissions: allowed_tools, writable_paths, readable_paths.
+    # Empty lists = no restrictions for that category.
+    allowed_users: []
+      # - user_id: 123456789
+      #   username: "your_username"
+      #   allowed_tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+      #   writable_paths: ["src/**", "tests/**", "*.py"]
+      #   readable_paths: ["src/**", "tests/**", "docs/**"]
+    deny_message: "You are not authorized to use this bot."
+
 api_keys:
   # These can also be set via environment variables:
   # ANTHROPIC_API_KEY and TELEGRAM_BOT_TOKEN
   anthropic_api_key: ""
   telegram_bot_token: ""
+
+hooks:
+  # Block Write/Edit to sensitive file patterns
+  # file_guards: [".env", "*.key", "*.pem"]
+
+  # Block Bash commands containing these strings
+  # command_guards: ["rm -rf /", "DROP TABLE"]
+
+  # Auto-approve read-only tools (skip permission prompts)
+  # auto_approve: ["Read", "Glob", "Grep"]
+
+  # Log all tool calls via structlog
+  # audit_log: true
+
+  # Load full damage-control patterns (bash commands, path protection)
+  # damage_control: true
+  # damage_control_patterns: "hooks/patterns.yaml"  # custom path, empty = default locations
 
 max_turns: 10  # Max agent tool-use rounds per message
 # Persistent memory folder. Auto-creates core/, to_improve/ subdirectories.
