@@ -59,6 +59,7 @@ class BotConfig(BaseModel):
     channels: list[ChannelConfig] = Field(default_factory=list)
     agents: dict[str, SubAgentConfig] = Field(default_factory=dict)
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
+    model: str = "claude-sonnet-4-20250514"
     max_turns: int = 10
     log_level: str = "INFO"
     port: int = 8000

@@ -122,6 +122,20 @@ def test_allowed_tools_from_config(tmp_path: Path) -> None:
     assert config.disallowed_tools == ["Bash"]
 
 
+def test_channel_settings_none_coerced() -> None:
+    """ChannelConfig with settings=None should be coerced to empty dict."""
+    from claude_code_bot.config import ChannelConfig
+    ch = ChannelConfig(type="http", settings=None)
+    assert ch.settings == {}
+
+
+def test_env_override_log_level(config_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """LOG_LEVEL env var should override config."""
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    config = load_config(str(config_file))
+    assert config.log_level == "DEBUG"
+
+
 def test_bot_config_model_validation() -> None:
     config = BotConfig(
         persona=PersonaConfig(name="Test"),

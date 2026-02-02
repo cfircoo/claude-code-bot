@@ -12,3 +12,4 @@ data/
 .ruff_cache/
 config.yaml
 memory/*
+.coverage

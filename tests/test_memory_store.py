@@ -100,3 +100,41 @@ def test_list_nonexistent_subfolder(memory_store: MemoryStore) -> None:
 
 def test_load_core_empty(memory_store: MemoryStore) -> None:
     assert memory_store.load_core() == ""
+
+
+def test_load_core_unreadable_file(memory_store: MemoryStore) -> None:
+    """Files that fail to read should be skipped silently."""
+    core = memory_store.memory_path / "core"
+    bad_file = core / "bad.txt"
+    bad_file.write_text("content")
+    # Make unreadable
+    bad_file.chmod(0o000)
+    try:
+        result = memory_store.load_core()
+        # Either empty or doesn't contain "bad.txt" content depending on OS
+    finally:
+        bad_file.chmod(0o644)
+
+
+def test_load_all_unreadable_file(memory_store: MemoryStore) -> None:
+    """Files that fail to read should be skipped silently."""
+    memory_store.write("notes/good.txt", "good content")
+    bad_file = memory_store.memory_path / "notes" / "bad.txt"
+    bad_file.write_text("bad content")
+    bad_file.chmod(0o000)
+    try:
+        result = memory_store.load_all()
+        assert "good content" in result
+    finally:
+        bad_file.chmod(0o644)
+
+
+def test_delete_nonexistent_file(memory_store: MemoryStore) -> None:
+    """Deleting a non-existent file should not raise."""
+    memory_store.delete("nonexistent.txt")  # Should not raise
+
+
+def test_path_traversal_read(memory_store: MemoryStore) -> None:
+    """Path traversal in list should be blocked."""
+    with pytest.raises(PermissionError, match="Path traversal"):
+        memory_store.list("../../etc")

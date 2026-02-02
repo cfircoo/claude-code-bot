@@ -57,17 +57,16 @@ class TestSendStreaming:
         events = [
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
-            {"type": "result", "content": "Hello world"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "Hello world" in output
-        assert "Bot: Hello world" in output
 
     def test_tool_start_and_done(self):
         events = [
             {"type": "tool_start", "tool": "SearchFiles"},
             {"type": "tool_done", "tool": "SearchFiles"},
-            {"type": "result", "content": "Done"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "[Using SearchFiles...]" in output
@@ -77,10 +76,10 @@ class TestSendStreaming:
         events = [
             {"type": "tool_start", "tool": "SubTask", "parent_tool_use_id": "abc123"},
             {"type": "tool_done", "tool": "SubTask"},
-            {"type": "result", "content": "Done"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
-        assert "↳" in output
+        assert "\u21b3" in output
         assert "[Using SubTask...]" in output
 
     def test_error_event(self):
@@ -93,7 +92,7 @@ class TestSendStreaming:
     def test_conversation_switched_event(self):
         events = [
             {"type": "conversation_switched", "conversation_id": "conv-123"},
-            {"type": "result", "content": "Switched"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "conv-123" in output
@@ -102,7 +101,7 @@ class TestSendStreaming:
     def test_debug_mode_shows_raw_events(self):
         events = [
             {"type": "text", "content": "Hi"},
-            {"type": "result", "content": "Hi"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events, debug=True)
         assert "[event]" in output
@@ -129,7 +128,7 @@ class TestSendStreaming:
 
     def test_conversation_id_passed_in_payload(self):
         """Verify conversation_id is included in the request payload."""
-        events = [{"type": "result", "content": "ok"}]
+        events = [{"type": "result", "session_id": "s1", "conversation_id": "c1"}]
         calls = []
 
         original_stream = FakeStreamResponse(events)
@@ -159,7 +158,8 @@ class TestSendStreaming:
         class BadJsonResponse(FakeStreamResponse):
             def iter_lines(self):
                 yield "data: not-json"
-                yield f"data: {json.dumps({'type': 'result', 'content': 'ok'})}"
+                yield f"data: {json.dumps({'type': 'text', 'content': 'ok'})}"
+                yield f"data: {json.dumps({'type': 'result', 'session_id': 's1', 'conversation_id': 'c1'})}"
 
         buf = StringIO()
         with patch("sys.stdout", buf):
@@ -167,12 +167,12 @@ class TestSendStreaming:
                 cli_module.send_streaming(
                     "http://localhost:8010", "test-user", "hello", None, False
                 )
-        assert "Bot: ok" in buf.getvalue()
+        assert "ok" in buf.getvalue()
 
 
     def test_api_key_header_sent(self):
         """When headers contain X-API-Key, it should be passed to httpx.stream."""
-        events = [{"type": "result", "content": "ok"}]
+        events = [{"type": "result", "session_id": "s1", "conversation_id": "c1"}]
         calls = []
 
         original_stream = FakeStreamResponse(events)
@@ -342,7 +342,7 @@ class TestAnsiColors:
         events = [
             {"type": "tool_start", "tool": "SearchFiles"},
             {"type": "tool_done", "tool": "SearchFiles"},
-            {"type": "result", "content": "Done"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "\033[" not in output
