@@ -57,17 +57,16 @@ class TestSendStreaming:
         events = [
             {"type": "text", "content": "Hello"},
             {"type": "text", "content": " world"},
-            {"type": "result", "content": "Hello world"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "Hello world" in output
-        assert "Bot: Hello world" in output
 
     def test_tool_start_and_done(self):
         events = [
             {"type": "tool_start", "tool": "SearchFiles"},
             {"type": "tool_done", "tool": "SearchFiles"},
-            {"type": "result", "content": "Done"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "[Using SearchFiles...]" in output
@@ -77,10 +76,10 @@ class TestSendStreaming:
         events = [
             {"type": "tool_start", "tool": "SubTask", "parent_tool_use_id": "abc123"},
             {"type": "tool_done", "tool": "SubTask"},
-            {"type": "result", "content": "Done"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
-        assert "↳" in output
+        assert "\u21b3" in output
         assert "[Using SubTask...]" in output
 
     def test_error_event(self):
@@ -93,7 +92,7 @@ class TestSendStreaming:
     def test_conversation_switched_event(self):
         events = [
             {"type": "conversation_switched", "conversation_id": "conv-123"},
-            {"type": "result", "content": "Switched"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events)
         assert "conv-123" in output
@@ -102,7 +101,7 @@ class TestSendStreaming:
     def test_debug_mode_shows_raw_events(self):
         events = [
             {"type": "text", "content": "Hi"},
-            {"type": "result", "content": "Hi"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
         ]
         output = _capture_send(events, debug=True)
         assert "[event]" in output
@@ -129,7 +128,7 @@ class TestSendStreaming:
 
     def test_conversation_id_passed_in_payload(self):
         """Verify conversation_id is included in the request payload."""
-        events = [{"type": "result", "content": "ok"}]
+        events = [{"type": "result", "session_id": "s1", "conversation_id": "c1"}]
         calls = []
 
         original_stream = FakeStreamResponse(events)
@@ -159,7 +158,8 @@ class TestSendStreaming:
         class BadJsonResponse(FakeStreamResponse):
             def iter_lines(self):
                 yield "data: not-json"
-                yield f"data: {json.dumps({'type': 'result', 'content': 'ok'})}"
+                yield f"data: {json.dumps({'type': 'text', 'content': 'ok'})}"
+                yield f"data: {json.dumps({'type': 'result', 'session_id': 's1', 'conversation_id': 'c1'})}"
 
         buf = StringIO()
         with patch("sys.stdout", buf):
@@ -167,7 +167,36 @@ class TestSendStreaming:
                 cli_module.send_streaming(
                     "http://localhost:8010", "test-user", "hello", None, False
                 )
-        assert "Bot: ok" in buf.getvalue()
+        assert "ok" in buf.getvalue()
+
+
+    def test_api_key_header_sent(self):
+        """When headers contain X-API-Key, it should be passed to httpx.stream."""
+        events = [{"type": "result", "session_id": "s1", "conversation_id": "c1"}]
+        calls = []
+
+        original_stream = FakeStreamResponse(events)
+
+        class CapturingStream:
+            def __init__(self, method, url, **kwargs):
+                calls.append(kwargs)
+                self._inner = original_stream
+
+            def __enter__(self):
+                return self._inner
+
+            def __exit__(self, *args):
+                pass
+
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", CapturingStream):
+                cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False,
+                    headers={"X-API-Key": "my-secret"},
+                )
+
+        assert len(calls) == 1
+        assert calls[0]["headers"]["X-API-Key"] == "my-secret"
 
 
 class TestMainArgparse:
@@ -187,12 +216,144 @@ class TestMainArgparse:
         )
         assert "--debug" in result.stdout
 
+    def test_api_key_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "agent.py", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--api-key" in result.stdout
+
     def test_interactive_flag_in_help(self):
         result = subprocess.run(
             [sys.executable, "agent.py", "--help"],
             capture_output=True, text=True,
         )
         assert "--interactive" in result.stdout
+
+
+    def test_send_streaming_returns_conversation_id(self):
+        """send_streaming should return conversation_id from result event."""
+        events = [
+            {"type": "text", "content": "Hi"},
+            {"type": "result", "conversation_id": "conv-xyz"},
+        ]
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", return_value=FakeStreamResponse(events)):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        assert cid == "conv-xyz"
+
+    def test_send_streaming_returns_none_without_conversation_id(self):
+        """send_streaming returns None when no result event has conversation_id."""
+        events = [{"type": "text", "content": "Hi"}]
+        with patch("sys.stdout", StringIO()):
+            with patch("httpx.stream", return_value=FakeStreamResponse(events)):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        assert cid is None
+
+
+    def test_retry_on_read_error(self):
+        """On ReadError, should retry and show [Reconnecting...]."""
+        import httpx as httpx_mod
+
+        call_count = 0
+
+        class RetryStream:
+            def __init__(self, method, url, **kwargs):
+                nonlocal call_count
+                call_count += 1
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            @property
+            def status_code(self):
+                return 200
+
+            def iter_lines(self):
+                if call_count == 1:
+                    yield f"data: {json.dumps({'type': 'text', 'content': 'partial'})}"
+                    raise httpx_mod.ReadError("connection reset")
+                else:
+                    yield f"data: {json.dumps({'type': 'text', 'content': 'full response'})}"
+                    yield f"data: {json.dumps({'type': 'result', 'conversation_id': 'c1'})}"
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            with patch("httpx.stream", RetryStream):
+                cid = cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        output = buf.getvalue()
+        assert "[Reconnecting...]" in output
+        assert "full response" in output
+        assert call_count == 2
+        assert cid == "c1"
+
+    def test_retry_exhausted(self):
+        """After max retries, should show final error."""
+        import httpx as httpx_mod
+
+        class AlwaysFailStream:
+            def __init__(self, method, url, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            @property
+            def status_code(self):
+                return 200
+
+            def iter_lines(self):
+                raise httpx_mod.ReadError("connection reset")
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            with patch("httpx.stream", AlwaysFailStream):
+                cli_module.send_streaming(
+                    "http://localhost:8010", "test-user", "hello", None, False
+                )
+        output = buf.getvalue()
+        assert "Connection lost after 3 attempts" in output
+
+
+class TestAnsiColors:
+    def test_no_ansi_codes_when_not_tty(self):
+        """When stdout is not a TTY (like in tests), ANSI codes should be empty."""
+        # Since tests redirect stdout to StringIO, _USE_COLOR should be False
+        assert cli_module._USE_COLOR is False
+        assert cli_module.DIM == ""
+        assert cli_module.RED == ""
+        assert cli_module.CYAN == ""
+        assert cli_module.RESET == ""
+
+    def test_tool_indicator_no_ansi_in_output(self):
+        """Tool indicators should not contain ANSI escape codes when not a TTY."""
+        events = [
+            {"type": "tool_start", "tool": "SearchFiles"},
+            {"type": "tool_done", "tool": "SearchFiles"},
+            {"type": "result", "session_id": "s1", "conversation_id": "c1"},
+        ]
+        output = _capture_send(events)
+        assert "\033[" not in output
+        assert "[Using SearchFiles...]" in output
+
+    def test_error_no_ansi_in_output(self):
+        """Error messages should not contain ANSI codes when not a TTY."""
+        events = [{"type": "error", "content": "Something broke"}]
+        output = _capture_send(events)
+        assert "\033[" not in output
+        assert "Error: Something broke" in output
 
 
 def httpx_connect_error():

@@ -20,6 +20,10 @@ class ConversationMeta(BaseModel):
     session_id: str | None = None
     created_at: float = Field(default_factory=time.time)
     last_active: float = Field(default_factory=time.time)
+    total_cost_usd: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    message_count: int = 0
 
 
 class ConversationStore:

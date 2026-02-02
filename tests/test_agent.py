@@ -17,10 +17,12 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import StreamEvent
 
-from claude_code_bot.agent import AgentService, CONVERSATION_INSTRUCTION
+from claude_code_bot.agent import AgentService
 from claude_code_bot.agents import BaseSubAgent, SubAgentRegistry
 from claude_code_bot.config import BotConfig, PersonaConfig
 from claude_code_bot.memory import ConversationStore
+from claude_code_bot.memory_store import MemoryStore
+from claude_code_bot.permissions import PermissionManager
 
 
 @pytest.fixture
@@ -54,7 +56,6 @@ def test_build_system_prompt(agent: AgentService) -> None:
     prompt = agent._build_system_prompt()
     assert "You are a test bot." in prompt
     assert "Be brief" in prompt
-    assert CONVERSATION_INSTRUCTION.strip() in prompt
 
 
 def test_build_system_prompt_with_agents(agent: AgentService) -> None:
@@ -69,6 +70,24 @@ def test_build_system_prompt_with_agents(agent: AgentService) -> None:
     prompt = agent._build_system_prompt()
     assert "helper" in prompt
     assert "Helps with stuff" in prompt
+
+
+def test_build_system_prompt_with_memory(config: BotConfig, store: ConversationStore, registry: SubAgentRegistry, tmp_path: Path) -> None:
+    """Memory store content should appear in system prompt."""
+    mem = MemoryStore(memory_path=tmp_path / "mem")
+    (mem.memory_path / "core" / "info.txt").write_text("Core knowledge")
+    mem.write("notes/tip.txt", "A useful tip")
+    agent = AgentService(config=config, store=store, registry=registry, memory_store=mem)
+    prompt = agent._build_system_prompt()
+    assert "## Memory" in prompt
+    assert "Core knowledge" in prompt
+    assert "A useful tip" in prompt
+
+
+def test_build_system_prompt_no_memory(agent: AgentService) -> None:
+    """Without memory store, no memory section."""
+    prompt = agent._build_system_prompt()
+    assert "## Memory" not in prompt
 
 
 def test_resolve_conversation_creates_new(agent: AgentService, store: ConversationStore) -> None:
@@ -216,33 +235,6 @@ async def test_chat_stream_tool_events(agent: AgentService) -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_conversation_switched(agent: AgentService, store: ConversationStore) -> None:
-    store.create("user1", "Target")
-
-    stream = _make_stream(
-        AssistantMessage(
-            content=[ToolUseBlock(
-                id="tu1",
-                name="mcp__conversations__switch_conversation",
-                input={"conversation_id": "conv-xyz"},
-            )],
-            model="claude",
-        ),
-        ResultMessage(
-            subtype="result", duration_ms=100, duration_api_ms=80,
-            is_error=False, num_turns=1, session_id="s1",
-            result="Switched!",
-        ),
-    )
-    with patch("claude_code_bot.agent.claude_query", stream):
-        events = [e async for e in agent.chat_stream("user1", "switch")]
-
-    switched = [e for e in events if e["type"] == "conversation_switched"]
-    assert len(switched) == 1
-    assert switched[0]["conversation_id"] == "conv-xyz"
-
-
-@pytest.mark.asyncio
 async def test_chat_stream_retries_on_failure(agent: AgentService) -> None:
     call_count = 0
 
@@ -263,7 +255,7 @@ async def test_chat_stream_retries_on_failure(agent: AgentService) -> None:
 
     result_events = [e for e in events if e["type"] == "result"]
     assert len(result_events) == 1
-    assert result_events[0]["content"] == "Recovered!"
+    assert result_events[0]["session_id"] == "s1"
     assert call_count == 2
 
 
@@ -300,7 +292,145 @@ async def test_chat_stream_auto_creates_conversation(agent: AgentService, store:
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_registers_mcp_tools(agent: AgentService) -> None:
+async def test_chat_stream_metadata_in_system_prompt(agent: AgentService) -> None:
+    """Metadata dict should be injected into system prompt status lines."""
+    captured_options = {}
+
+    async def mock_query(prompt, options):
+        captured_options["system_prompt"] = options.system_prompt
+        yield ResultMessage(
+            subtype="result", duration_ms=100, duration_api_ms=80,
+            is_error=False, num_turns=1, session_id="s1",
+            result="ok",
+        )
+
+    with patch("claude_code_bot.agent.claude_query", mock_query):
+        _ = [e async for e in agent.chat_stream("user1", "hi", metadata={"channel": "telegram", "username": "alice"})]
+
+    prompt = captured_options["system_prompt"]
+    assert "channel: telegram" in prompt
+    assert "username: alice" in prompt
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_usage_extraction(agent: AgentService, store: ConversationStore) -> None:
+    """Usage stats from ResultMessage should appear in result event and be persisted."""
+    stream = _make_stream(
+        ResultMessage(
+            subtype="result", duration_ms=500, duration_api_ms=400,
+            is_error=False, num_turns=2, session_id="s1",
+            result="Done",
+            usage={"input_tokens": 100, "output_tokens": 50, "cache_read_input_tokens": 10, "cache_creation_input_tokens": 5},
+            total_cost_usd=0.01,
+        ),
+    )
+    with patch("claude_code_bot.agent.claude_query", stream):
+        events = [e async for e in agent.chat_stream("user1", "hi")]
+
+    result = [e for e in events if e["type"] == "result"][0]
+    assert "usage" in result
+    assert result["usage"]["input_tokens"] == 110  # 100 + 10 cache_read
+    assert result["usage"]["output_tokens"] == 50
+    assert result["usage"]["cost_usd"] == 0.01
+
+    # Persisted to store
+    convos = store.list("user1")
+    assert convos[0].total_cost_usd == 0.01
+    assert convos[0].total_input_tokens == 110
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_with_permission_manager(config: BotConfig, store: ConversationStore, registry: SubAgentRegistry) -> None:
+    """When permission_manager is set, streaming prompt should be used and can_use_tool set."""
+    pm = PermissionManager(tools_requiring_approval=["Bash"])
+    agent = AgentService(config=config, store=store, registry=registry, permission_manager=pm)
+
+    captured_options = {}
+
+    async def mock_query(prompt, options):
+        captured_options["can_use_tool"] = options.can_use_tool
+        captured_options["system_prompt"] = options.system_prompt
+        # Consume the async iterable prompt
+        if hasattr(prompt, "__aiter__"):
+            async for _ in prompt:
+                pass
+        yield ResultMessage(
+            subtype="result", duration_ms=100, duration_api_ms=80,
+            is_error=False, num_turns=1, session_id="s1",
+            result="ok",
+        )
+
+    with patch("claude_code_bot.agent.claude_query", mock_query):
+        _ = [e async for e in agent.chat_stream("user1", "hi")]
+
+    assert captured_options["can_use_tool"] is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_non_streaming(agent: AgentService) -> None:
+    """chat() should collect text events and return joined text."""
+    stream = _make_stream(
+        StreamEvent(
+            uuid="1", session_id="s1", event={
+                "type": "content_block_delta",
+                "delta": {"type": "text_delta", "text": "Hello "},
+            }
+        ),
+        StreamEvent(
+            uuid="2", session_id="s1", event={
+                "type": "content_block_delta",
+                "delta": {"type": "text_delta", "text": "world!"},
+            }
+        ),
+        ResultMessage(
+            subtype="result", duration_ms=100, duration_api_ms=80,
+            is_error=False, num_turns=1, session_id="s1",
+            result="Hello world!",
+        ),
+    )
+    with patch("claude_code_bot.agent.claude_query", stream):
+        result = await agent.chat("user1", "hi")
+
+    assert result == "Hello world!"
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_fallback_on_error(agent: AgentService) -> None:
+    """chat() should return fallback message on error."""
+    async def always_fail(prompt, options):
+        raise RuntimeError("fail")
+        yield
+
+    with patch("claude_code_bot.agent.claude_query", always_fail):
+        with patch("claude_code_bot.agent.BACKOFF_BASE", 0.01):
+            result = await agent.chat("user1", "hi")
+
+    assert result == "Oops, something went wrong."
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_ellipsis_on_empty(agent: AgentService) -> None:
+    """chat() should return '...' when no text events."""
+    stream = _make_stream(
+        ResultMessage(
+            subtype="result", duration_ms=100, duration_api_ms=80,
+            is_error=False, num_turns=1, session_id="s1",
+            result="",
+        ),
+    )
+    with patch("claude_code_bot.agent.claude_query", stream):
+        result = await agent.chat("user1", "hi")
+
+    assert result == "..."
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_allowed_tools(config: BotConfig, store: ConversationStore, registry: SubAgentRegistry) -> None:
+    """allowed_tools and disallowed_tools should be passed to options."""
+    config.allowed_tools = ["Read", "Write"]
+    config.disallowed_tools = ["Bash"]
+    agent = AgentService(config=config, store=store, registry=registry)
+
     captured_options = {}
 
     async def mock_query(prompt, options):
@@ -314,5 +444,5 @@ async def test_chat_stream_registers_mcp_tools(agent: AgentService) -> None:
     with patch("claude_code_bot.agent.claude_query", mock_query):
         _ = [e async for e in agent.chat_stream("user1", "hi")]
 
-    assert "conversations" in captured_options["mcp_servers"]
-    assert "mcp__conversations__list_conversations" in captured_options["allowed_tools"]
+    assert captured_options["allowed_tools"] == ["Read", "Write"]
+    assert captured_options["disallowed_tools"] == ["Bash"]

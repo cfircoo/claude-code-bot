@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, AsyncIterable
 
 import structlog
 from claude_agent_sdk import (
@@ -20,6 +20,8 @@ from claude_agent_sdk.types import StreamEvent
 from claude_code_bot.agents import SubAgentRegistry
 from claude_code_bot.config import BotConfig
 from claude_code_bot.memory import ConversationMeta, ConversationStore
+from claude_code_bot.memory_store import MemoryStore
+from claude_code_bot.permissions import PermissionManager
 logger = structlog.get_logger()
 
 MAX_RETRIES = 3
@@ -34,10 +36,14 @@ class AgentService:
         config: BotConfig,
         store: ConversationStore,
         registry: SubAgentRegistry,
+        memory_store: MemoryStore | None = None,
+        permission_manager: PermissionManager | None = None,
     ) -> None:
         self.config = config
         self.store = store
         self.registry = registry
+        self.memory_store = memory_store
+        self.permission_manager = permission_manager
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt from persona config."""
@@ -59,6 +65,19 @@ class AgentService:
             parts.append(
                 "\nTo use a sub-agent, call the corresponding tool with a 'query' parameter."
             )
+
+        # Append memory content if available
+        if self.memory_store:
+            core = self.memory_store.load_core()
+            all_notes = self.memory_store.load_all()
+            # Remove core content from all_notes to avoid duplication
+            # all_notes includes core, so we show it structured
+            if core or all_notes:
+                parts.append("\n\n## Memory")
+                if core:
+                    parts.append(f"### Core\n{core}")
+                if all_notes:
+                    parts.append(f"### Notes\n{all_notes}")
 
         return "\n".join(parts)
 
@@ -82,6 +101,7 @@ class AgentService:
         user_id: str,
         message: str,
         conversation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, str], None]:
         """Process a message and yield streaming events.
 
@@ -94,13 +114,37 @@ class AgentService:
           - {type: "conversation_switched", conversation_id: str}
         """
         meta = self._resolve_conversation(user_id, conversation_id)
+        logger.debug("chat_stream_request", user_id=user_id, message=message, conversation_id=meta.conversation_id, metadata=metadata)
         system_prompt = self._build_system_prompt()
 
+        # Inject channel/user context and bot status into system prompt
+        status_lines = [
+            f"  model: {self.config.model}",
+            f"  max_turns: {self.config.max_turns}",
+            f"  permission_mode: {self.config.permission_mode}",
+            f"  conversation_id: {meta.conversation_id}",
+        ]
+        if meta.session_id:
+            status_lines.append(f"  session_id: {meta.session_id} (resumed)")
+        if metadata:
+            for k, v in metadata.items():
+                if v is not None:
+                    status_lines.append(f"  {k}: {v}")
+        system_prompt += "\n\n## Current Session Status\n" + "\n".join(status_lines)
+
         options = ClaudeAgentOptions(
+            model=self.config.model,
             system_prompt=system_prompt,
             include_partial_messages=True,
-            max_turns=1,
+            max_turns=self.config.max_turns,
+            permission_mode=self.config.permission_mode,
         )
+        if self.config.allowed_tools:
+            options.allowed_tools = self.config.allowed_tools
+        if self.config.disallowed_tools:
+            options.disallowed_tools = self.config.disallowed_tools
+        if self.permission_manager:
+            options.can_use_tool = self.permission_manager.make_callback()
 
         if meta.session_id:
             options.resume = meta.session_id
@@ -110,9 +154,25 @@ class AgentService:
         result_text_parts: list[str] = []
         session_id: str | None = None
 
+        use_streaming_prompt = options.can_use_tool is not None
+
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                async for msg in claude_query(prompt=message, options=options):
+                # SDK requires AsyncIterable prompt when can_use_tool is set
+                prompt: str | AsyncIterable[dict[str, Any]]
+                if use_streaming_prompt:
+
+                    async def _make_prompt() -> AsyncIterable[dict[str, Any]]:
+                        yield {
+                            "type": "user",
+                            "message": {"role": "user", "content": message},
+                        }
+
+                    prompt = _make_prompt()
+                else:
+                    prompt = message
+
+                async for msg in claude_query(prompt=prompt, options=options):
                     if isinstance(msg, SystemMessage):
                         if msg.subtype == "init":
                             sid = msg.data.get("session_id")
@@ -146,21 +206,56 @@ class AgentService:
                                     yield {"type": "tool_done", "tool": tool_name}
 
                     elif isinstance(msg, ResultMessage):
+                        logger.debug("llm_result_message", result=vars(msg) if hasattr(msg, "__dict__") else str(msg))
                         if msg.session_id:
                             session_id = msg.session_id
+                        # Extract usage stats — ResultMessage fields may be attrs or dict
+                        result_usage: dict[str, Any] = {}
+                        raw = vars(msg) if hasattr(msg, "__dict__") else {}
+                        usage = raw.get("usage") or getattr(msg, "usage", None)
+                        if isinstance(usage, dict):
+                            result_usage["input_tokens"] = usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                            result_usage["output_tokens"] = usage.get("output_tokens", 0)
+                            result_usage["cache_creation_tokens"] = usage.get("cache_creation_input_tokens", 0)
+                        cost = raw.get("total_cost_usd") or getattr(msg, "total_cost_usd", None)
+                        if cost:
+                            result_usage["cost_usd"] = cost
+                        turns = raw.get("num_turns") or getattr(msg, "num_turns", None)
+                        if turns is not None:
+                            result_usage["num_turns"] = turns
+                        duration = raw.get("duration_ms") or getattr(msg, "duration_ms", None)
+                        if duration:
+                            result_usage["duration_ms"] = duration
+                        if result_usage:
+                            logger.debug("llm_usage", **result_usage)
 
                 # Success — persist session
                 import time
 
                 meta.last_active = time.time()
+                meta.message_count += 1
+                if result_usage:
+                    meta.total_cost_usd += result_usage.get("cost_usd", 0)
+                    meta.total_input_tokens += result_usage.get("input_tokens", 0)
+                    meta.total_output_tokens += result_usage.get("output_tokens", 0)
                 if session_id:
                     meta.session_id = session_id
                 self.store.update(meta)
 
-                yield {
+                result_event: dict[str, Any] = {
                     "type": "result",
                     "session_id": session_id or "",
+                    "conversation_id": meta.conversation_id,
                 }
+                if result_usage:
+                    result_event["usage"] = result_usage
+                result_event["totals"] = {
+                    "cost_usd": meta.total_cost_usd,
+                    "input_tokens": meta.total_input_tokens,
+                    "output_tokens": meta.total_output_tokens,
+                    "messages": meta.message_count,
+                }
+                yield result_event
                 return
 
             except Exception as e:

@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-editable
 COPY src/ src/
 COPY config.example.yaml /app/config.yaml
 
+
 VOLUME ["/app/data"]
 
 EXPOSE 8000
