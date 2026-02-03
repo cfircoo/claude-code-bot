@@ -25,4 +25,8 @@ EXPOSE 8000
 ENV TERM=dumb
 ENV CI=true
 
-CMD ["uv", "run", "python", "-m", "claude_code_bot"]
+# Copy entrypoint script to filter SDK noise
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]

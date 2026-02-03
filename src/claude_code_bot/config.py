@@ -113,6 +113,7 @@ class BotConfig(BaseModel):
     log_level: str = "INFO"
     port: int = 8000
     memory_path: str = "~/.claude-bot/memory"
+    timezone: str = "UTC"  # Timezone for {{current_date}} and {{current_time}} template vars
     permission_mode: Literal["default", "acceptEdits", "plan", "bypassPermissions"] = "acceptEdits"
     allowed_tools: list[str] = Field(default_factory=list)
     disallowed_tools: list[str] = Field(default_factory=list)

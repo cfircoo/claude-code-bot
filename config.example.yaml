@@ -5,6 +5,7 @@ persona:
   name: "MyBot"
   system_prompt: |
     You are a helpful assistant named MyBot.
+    The date today is {{current_date}} and the time is {{current_time}}.
 
     ## Memory System
     You have a persistent memory system. Your memory contents are automatically loaded into this conversation.
@@ -116,6 +117,8 @@ permission_mode: acceptEdits
 # tools_requiring_approval: ["Bash"]
 log_level: INFO
 port: 8000
+# Timezone for {{current_date}} and {{current_time}} template variables in system_prompt
+timezone: "UTC"  # Examples: "America/New_York", "Europe/London", "Asia/Jerusalem"
 
 # Scheduler configuration (for scheduler container)
 scheduler:

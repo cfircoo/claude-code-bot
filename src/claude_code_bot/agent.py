@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, AsyncGenerator, AsyncIterable
 
 import structlog
@@ -50,9 +52,25 @@ class AgentService:
         self.hook_manager = hook_manager
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt from persona config."""
+        """Build the system prompt from persona config.
+
+        Supports template variables:
+          - {{current_date}} — Current date in configured timezone (YYYY-MM-DD)
+          - {{current_time}} — Current time in configured timezone (HH:MM)
+        """
         persona = self.config.persona
-        parts = [persona.system_prompt]
+
+        # Replace template variables with timezone-aware values
+        try:
+            tz = ZoneInfo(self.config.timezone)
+        except Exception:
+            tz = ZoneInfo("UTC")
+        now = datetime.now(tz)
+        system_prompt = persona.system_prompt
+        system_prompt = system_prompt.replace("{{current_date}}", now.strftime("%Y-%m-%d"))
+        system_prompt = system_prompt.replace("{{current_time}}", now.strftime("%H:%M"))
+
+        parts = [system_prompt]
 
         if persona.constraints:
             parts.append("\n\nBehavioral rules:")
