@@ -16,6 +16,10 @@ A Python framework for building AI-powered conversational bots using [claude-age
 - **Sub-agent system** — Register custom agents that the main bot can delegate to
 - **Interactive installer** — `python install.py` walks through first-time setup
 - **Docker ready** — Single `docker compose up` to deploy
+- **Scheduler service** — Automated task execution on configurable intervals
+- **telegram-send CLI** — Send messages directly to Telegram: `uv run telegram-send "message"`
+- **File logging** — Logs to stdout + `logs/bot.log`
+- **SDK Skills** — Load skills from `.claude/skills/` automatically
 - **98% test coverage** — Comprehensive test suite with pytest-cov
 
 ## Quick Start
@@ -237,6 +241,55 @@ Send these commands to @BotFather:
 - `/setuserpic` — Set a profile picture
 - `/setcommands` — Set command menu (e.g., `start - Start chatting`)
 
+## Scheduler
+
+The scheduler service triggers the bot at configurable intervals to execute automated tasks.
+
+### Configuration
+
+Add to `config.yaml`:
+
+```yaml
+scheduler:
+  enabled: true           # false to disable (container exits cleanly)
+  interval: 30            # minutes between triggers
+  system_prompt: |
+    <scheduler>
+      You are receiving a scheduled trigger.
+      1. Read `memory/scheduled_tasks.md` for your task list
+      2. Execute due tasks based on current time
+      3. Update the file with completion timestamps
+      4. Send a summary to Telegram using telegram-send skill
+    </scheduler>
+  message: "Scheduler trigger: check and execute scheduled tasks."
+```
+
+### Running
+
+```bash
+# Bot + scheduler (if scheduler.enabled: true)
+docker compose up
+
+# Scheduler reads from main config.yaml
+# Bot manages its own task list at memory/scheduled_tasks.md
+```
+
+## telegram-send CLI
+
+Send messages directly to Telegram without going through the bot.
+
+```bash
+# Basic usage (loads chat_id and token from config.yaml)
+uv run telegram-send "Hello from CLI!"
+
+# With explicit options
+uv run telegram-send "Hello" --chat-id 123456789 --token "BOT_TOKEN"
+```
+
+Config priority: CLI args > environment variables > config.yaml
+
+The tool reads `chat_id` from `channels.telegram.settings.chat_id` and `token` from `api_keys.telegram_bot_token`.
+
 ## API Reference
 
 ### Endpoints
@@ -287,13 +340,41 @@ services:
       - ./data:/app/data                    # Conversation data persistence
       - ~/.claude:/root/.claude             # Claude subscription auth (see step 2)
       - ./memory:/app/memory                # Persistent memory
+      - ./logs:/app/logs                    # Log files
     environment:
       - CONFIG_PATH=/app/config.yaml
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}  # Uncomment for API key auth
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    restart: on-failure                     # Exits cleanly when disabled
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - TZ=${TZ:-UTC}
+      - BOT_URL=http://bot:8000
+      - HTTP_API_KEY=${HTTP_API_KEY:-}
+    depends_on:
+      bot:
+        condition: service_healthy
 ```
 
 See [Connect to Claude](#2-connect-to-claude) for authentication options.
+
+### Logs
+
+Logs are written to both stdout and `logs/bot.log`:
+
+```bash
+# View logs
+tail -f logs/bot.log
+
+# Or via docker
+docker compose logs -f bot
+```
 
 ## Configuration Reference
 
@@ -353,16 +434,23 @@ src/claude_code_bot/
   memory.py          # ConversationStore, conversation metadata
   agents.py          # Sub-agent base class and registry
   tools.py           # MCP tool definitions
-  logging.py         # structlog JSON configuration
+  logging.py         # structlog JSON configuration (stdout + file)
   memory_store.py    # Persistent memory (core/notes/to_improve)
   permissions.py     # Interactive tool approval system
   channels/
     telegram.py      # Telegram adapter (aiogram, commands, inline keyboards)
+  cli/
+    telegram_send.py # CLI tool for direct Telegram messaging
+scheduler/
+  run.py             # Scheduler service
+  Dockerfile
+.claude/skills/      # SDK skills (auto-loaded)
 agent.py             # CLI chat tool
 install.py           # Interactive first-time setup
 config.example.yaml  # Example configuration
 Dockerfile
 docker-compose.yml
+logs/                # Log files (gitignored)
 ```
 
 ## License
