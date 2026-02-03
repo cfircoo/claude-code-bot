@@ -5,13 +5,35 @@ services:
     restart: unless-stopped
     ports:
       - "8010:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
       - ~/.claude:/root/.claude
       - ./memory:/app/memory
+      - ./logs:/app/logs
     environment:
       - CONFIG_PATH=/app/config.yaml
    #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - HTTP_API_KEY=${HTTP_API_KEY:-}
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    restart: on-failure
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - TZ=${TZ:-Asia/Jerusalem}
+      - BOT_URL=http://bot:8000
+      - HTTP_API_KEY=${HTTP_API_KEY:-}
+    depends_on:
+      bot:
+        condition: service_healthy

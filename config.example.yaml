@@ -44,6 +44,8 @@ channels:
       # api_key: "your-secret-key"
   - type: telegram
     settings:
+      # Chat ID for proactive messages (or set TELEGRAM_CHAT_ID env var)
+      # chat_id: "123456789"
       # Show tool usage indicators in responses (default: false)
       # show_tool_activity: true
       # Send "Thinking..." message after this many seconds (default: 10)
@@ -79,7 +81,7 @@ security:
 
 api_keys:
   # These can also be set via environment variables:
-  # ANTHROPIC_API_KEY and TELEGRAM_BOT_TOKEN
+  # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
   anthropic_api_key: ""
   telegram_bot_token: ""
 
@@ -114,3 +116,24 @@ permission_mode: acceptEdits
 # tools_requiring_approval: ["Bash"]
 log_level: INFO
 port: 8000
+
+# Scheduler configuration (for scheduler container)
+scheduler:
+  enabled: true
+  interval: 30  # minutes between triggers
+  system_prompt: |
+    <scheduler>
+      You are receiving a scheduled trigger from the scheduler system that run every 30 minutes.
+      please use timestamp in Asia/Jerusalem timezone for all tasks and scheduling.
+      check the time now and act acording to it.
+
+      1. Read `memory/scheduled_tasks.md` for your task list
+      2. Execute any tasks that are due based on current time
+      3. Update the file with completion timestamps
+      4. Send a brief summary to Telegram using the telegram-send skill
+
+      If the file doesn't exist, create it with sensible default tasks.
+
+      Be autonomous - no need to ask for approval.
+    </scheduler>
+  message: "Scheduler trigger: check and execute scheduled tasks."

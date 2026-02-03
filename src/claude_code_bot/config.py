@@ -130,6 +130,13 @@ def _apply_env_overrides(config: BotConfig) -> BotConfig:
     if env_telegram:
         config.api_keys.telegram_bot_token = env_telegram
 
+    env_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if env_chat_id:
+        for ch in config.channels:
+            if ch.type == "telegram":
+                ch.settings["chat_id"] = env_chat_id
+                break
+
     env_log_level = os.environ.get("LOG_LEVEL")
     if env_log_level:
         config.log_level = env_log_level
