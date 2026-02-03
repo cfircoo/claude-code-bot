@@ -5,6 +5,12 @@ services:
     restart: unless-stopped
     ports:
       - "8010:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
@@ -15,3 +21,20 @@ services:
    #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - HTTP_API_KEY=${HTTP_API_KEY:-}
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./scheduler/tasks.yaml:/app/tasks.yaml:ro
+      - ./scheduler/state.json:/app/state.json
+    environment:
+      - TZ=${TZ:-Asia/Jerusalem}
+      - BOT_URL=http://bot:8000
+      - HTTP_API_KEY=${HTTP_API_KEY:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      bot:
+        condition: service_healthy
