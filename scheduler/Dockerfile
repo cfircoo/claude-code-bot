@@ -6,6 +6,6 @@ WORKDIR /app
 
 COPY scheduler/run.py .
 
-RUN uv pip install --system httpx croniter pyyaml
+RUN uv pip install --system httpx pyyaml
 
 CMD ["python", "run.py"]

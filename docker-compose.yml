@@ -16,6 +16,7 @@ services:
       - ./data:/app/data
       - ~/.claude:/root/.claude
       - ./memory:/app/memory
+      - ./logs:/app/logs
     environment:
       - CONFIG_PATH=/app/config.yaml
    #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -26,15 +27,13 @@ services:
     build:
       context: .
       dockerfile: scheduler/Dockerfile
-    restart: unless-stopped
+    restart: on-failure
     volumes:
-      - ./scheduler/tasks.yaml:/app/tasks.yaml:ro
-      - ./scheduler/state.json:/app/state.json
+      - ./config.yaml:/app/config.yaml:ro
     environment:
       - TZ=${TZ:-Asia/Jerusalem}
       - BOT_URL=http://bot:8000
       - HTTP_API_KEY=${HTTP_API_KEY:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     depends_on:
       bot:
         condition: service_healthy
