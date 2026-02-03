@@ -243,7 +243,7 @@ Send these commands to @BotFather:
 
 ## Scheduler
 
-The scheduler service triggers the bot at configurable intervals to execute automated tasks.
+The scheduler service triggers the bot on a cron schedule to execute automated tasks.
 
 ### Configuration
 
@@ -251,8 +251,9 @@ Add to `config.yaml`:
 
 ```yaml
 scheduler:
-  enabled: true           # false to disable (container exits cleanly)
-  interval: 30            # minutes between triggers
+  enabled: true                # false to disable (container exits cleanly)
+  cron: "30 * * * *"           # Run at minute 30 of every hour
+  timezone: "Asia/Jerusalem"   # Timezone for cron evaluation
   system_prompt: |
     <scheduler>
       You are receiving a scheduled trigger.
@@ -263,6 +264,16 @@ scheduler:
     </scheduler>
   message: "Scheduler trigger: check and execute scheduled tasks."
 ```
+
+### Cron Examples
+
+| Cron Expression | Description |
+|-----------------|-------------|
+| `30 * * * *` | Every hour at :30 |
+| `0 8 * * *` | Daily at 8:00 |
+| `*/15 * * * *` | Every 15 minutes |
+| `0 9,18 * * *` | At 9:00 and 18:00 |
+| `0 0 * * 0` | Weekly on Sunday at midnight |
 
 ### Running
 
@@ -338,7 +349,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro  # Bot configuration
       - ./data:/app/data                    # Conversation data persistence
-      - ~/.claude:/root/.claude             # Claude subscription auth (see step 2)
+      - ~/.claude-docker:/root/.claude      # Claude credentials (see below)
       - ./memory:/app/memory                # Persistent memory
       - ./logs:/app/logs                    # Log files
     environment:
@@ -354,13 +365,25 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     environment:
-      - TZ=${TZ:-UTC}
+      - TZ=${TZ:-Asia/Jerusalem}
       - BOT_URL=http://bot:8000
       - HTTP_API_KEY=${HTTP_API_KEY:-}
     depends_on:
       bot:
         condition: service_healthy
 ```
+
+### Claude Credentials for Docker
+
+We recommend using a minimal `~/.claude-docker/` directory instead of mounting your full `~/.claude/`:
+
+```bash
+# Create minimal claude directory for Docker (avoids MCP plugin conflicts)
+mkdir -p ~/.claude-docker
+cp ~/.claude/.credentials.json ~/.claude-docker/
+```
+
+This avoids issues with MCP plugins that can't run in Docker containers.
 
 See [Connect to Claude](#2-connect-to-claude) for authentication options.
 

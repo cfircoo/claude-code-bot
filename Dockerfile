@@ -21,4 +21,8 @@ VOLUME ["/app/data"]
 
 EXPOSE 8000
 
+# Set headless environment to reduce SDK noise
+ENV TERM=dumb
+ENV CI=true
+
 CMD ["uv", "run", "python", "-m", "claude_code_bot"]

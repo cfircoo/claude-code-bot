@@ -120,12 +120,11 @@ port: 8000
 # Scheduler configuration (for scheduler container)
 scheduler:
   enabled: true
-  interval: 30  # minutes between triggers
+  cron: "30 * * * *"  # Run at minute 30 of every hour (cron expression)
+  timezone: "Asia/Jerusalem"  # Timezone for cron evaluation
   system_prompt: |
     <scheduler>
-      You are receiving a scheduled trigger from the scheduler system that run every 30 minutes.
-      please use timestamp in Asia/Jerusalem timezone for all tasks and scheduling.
-      check the time now and act acording to it.
+      You are receiving a scheduled trigger from the scheduler.
 
       1. Read `memory/scheduled_tasks.md` for your task list
       2. Execute any tasks that are due based on current time
