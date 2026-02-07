@@ -19,7 +19,8 @@ A Python framework for building AI-powered conversational bots using [claude-age
 - **Scheduler service** — Automated task execution on configurable intervals
 - **telegram-send CLI** — Send messages directly to Telegram: `uv run telegram-send "message"`
 - **File logging** — Logs to stdout + `logs/bot.log`
-- **SDK Skills** — Load skills from `.claude/skills/` automatically
+- **SDK Skills** — Load skills from `.claude/skills/` with optional allowlist filtering
+- **Template variables** — `{{current_date}}` and `{{current_time}}` in system prompts
 - **98% test coverage** — Comprehensive test suite with pytest-cov
 
 ## Quick Start
@@ -130,7 +131,11 @@ api_keys:
 **With Docker (recommended):**
 
 ```bash
+# Bot only
 docker compose up --build
+
+# Bot + scheduler (full system)
+docker compose -f docker-compose.full.yml up --build
 ```
 
 **Without Docker:**
@@ -278,8 +283,8 @@ scheduler:
 ### Running
 
 ```bash
-# Bot + scheduler (if scheduler.enabled: true)
-docker compose up
+# Use the full compose file to include scheduler
+docker compose -f docker-compose.full.yml up --build
 
 # Scheduler reads from main config.yaml
 # Bot manages its own task list at memory/scheduled_tasks.md
@@ -338,8 +343,21 @@ channels:
 
 ## Docker
 
+Two compose files are provided:
+
+- **`docker-compose.yml`** — Bot only (minimal deployment)
+- **`docker-compose.full.yml`** — Bot + Scheduler (full system)
+
+```bash
+# Bot only
+docker compose up --build
+
+# Full system (bot + scheduler)
+docker compose -f docker-compose.full.yml up --build
+```
+
 ```yaml
-# docker-compose.yml
+# docker-compose.yml (bot only)
 services:
   bot:
     build: .
@@ -356,7 +374,11 @@ services:
       - CONFIG_PATH=/app/config.yaml
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}  # Uncomment for API key auth
+```
 
+The full compose file (`docker-compose.full.yml`) adds the scheduler service:
+
+```yaml
   scheduler:
     build:
       context: .
@@ -405,6 +427,7 @@ docker compose logs -f bot
 model: "claude-sonnet-4-20250514"   # Default model (switchable at runtime)
 max_turns: 10                        # Max agent turns per message
 permission_mode: "acceptEdits"       # default | acceptEdits | plan | bypassPermissions
+timezone: "UTC"                      # For {{current_date}} and {{current_time}} template vars
 allowed_tools:                       # Tools the agent can use
   - WebSearch
   - WebFetch
@@ -412,10 +435,24 @@ allowed_tools:                       # Tools the agent can use
   - Write
   - Edit
   - Bash
+skills_allowlist: []                 # Empty = all skills. Example: ["telegram-send"]
 memory_path: "~/.claude-bot/memory"  # Persistent memory location
 log_level: "INFO"                    # DEBUG | INFO | WARNING | ERROR
 port: 8000
 ```
+
+### Template Variables
+
+Use these in your `system_prompt` for dynamic date/time:
+
+```yaml
+persona:
+  system_prompt: |
+    Today is {{current_date}} and the time is {{current_time}}.
+    ...
+```
+
+Variables are replaced with timezone-aware values (configured via `timezone` setting).
 
 ### Memory System
 
@@ -470,10 +507,11 @@ scheduler/
 .claude/skills/      # SDK skills (auto-loaded)
 agent.py             # CLI chat tool
 install.py           # Interactive first-time setup
-config.example.yaml  # Example configuration
+config.example.yaml   # Example configuration
 Dockerfile
-docker-compose.yml
-logs/                # Log files (gitignored)
+docker-compose.yml      # Bot only
+docker-compose.full.yml # Bot + scheduler
+logs/                 # Log files (gitignored)
 ```
 
 ## License

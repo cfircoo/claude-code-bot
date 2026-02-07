@@ -19,6 +19,12 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import StreamEvent
 
+from claude_agent_sdk.types import (
+    PermissionResultAllow,
+    PermissionResultDeny,
+    ToolPermissionContext,
+)
+
 from claude_code_bot.agents import SubAgentRegistry
 from claude_code_bot.config import BotConfig, UserRestrictions
 from claude_code_bot.memory import ConversationMeta, ConversationStore
@@ -27,6 +33,37 @@ from claude_code_bot.hooks import HookManager
 from claude_code_bot.permissions import PermissionManager, make_restricted_callback
 
 logger = structlog.get_logger()
+
+# Type for can_use_tool callback
+ToolCallback = Any  # Callable[[str, dict, ToolPermissionContext], Awaitable[...]]
+
+
+def make_skill_filter_callback(
+    skills_allowlist: list[str],
+    base_callback: ToolCallback | None = None,
+) -> ToolCallback:
+    """Wrap a callback to filter skill invocations by allowlist.
+
+    If skills_allowlist is empty, all skills are allowed.
+    """
+
+    async def can_use_tool(
+        tool_name: str,
+        tool_input: dict[str, Any],
+        context: ToolPermissionContext,
+    ) -> PermissionResultAllow | PermissionResultDeny:
+        # Filter Skill tool calls by allowlist
+        if tool_name == "Skill" and skills_allowlist:
+            skill_name = tool_input.get("skill", "")
+            if skill_name not in skills_allowlist:
+                logger.debug("skill_blocked", skill=skill_name, allowlist=skills_allowlist)
+                return PermissionResultDeny(message=f"Skill '{skill_name}' not in allowlist")
+
+        if base_callback:
+            return await base_callback(tool_name, tool_input, context)
+        return PermissionResultAllow()
+
+    return can_use_tool
 
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0
@@ -182,6 +219,11 @@ class AgentService:
                 options.allowed_tools = restrictions.allowed_tools
             options.can_use_tool = make_restricted_callback(
                 restrictions, base_callback=options.can_use_tool
+            )
+        # Apply skill allowlist filter (empty list = all allowed)
+        if self.config.skills_allowlist:
+            options.can_use_tool = make_skill_filter_callback(
+                self.config.skills_allowlist, base_callback=options.can_use_tool
             )
         if self.hook_manager:
             options.hooks = self.hook_manager.build()
