@@ -21,4 +21,12 @@ VOLUME ["/app/data"]
 
 EXPOSE 8000
 
-CMD ["uv", "run", "python", "-m", "claude_code_bot"]
+# Set headless environment to reduce SDK noise
+ENV TERM=dumb
+ENV CI=true
+
+# Copy entrypoint script to filter SDK noise
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]

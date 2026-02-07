@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Scheduler — triggers bot on interval to execute scheduled tasks."""
+"""Scheduler — triggers bot on cron schedule to execute scheduled tasks."""
 
 from __future__ import annotations
 
 import json
 import os
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
+from croniter import croniter
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yaml")
 BOT_URL = os.environ.get("BOT_URL", "http://localhost:8000").rstrip("/")
@@ -83,26 +86,37 @@ def main() -> None:
         print("Scheduler disabled in config (scheduler.enabled: false). Exiting.")
         return  # exit 0 — won't restart with on-failure policy
 
-    interval_minutes = config.get("interval", 30)
+    # Cron schedule (default: every hour at :30)
+    cron_expr = config.get("cron", "30 * * * *")
+    timezone = config.get("timezone", os.environ.get("TZ", "UTC"))
+    tz = ZoneInfo(timezone)
+
     system_prompt = config.get("system_prompt", "").strip()
     message = config.get("message", "Scheduler trigger.")
 
     print(f"Scheduler starting — bot={BOT_URL}")
-    print(f"Interval: {interval_minutes} minutes")
+    print(f"Cron: {cron_expr} (timezone: {timezone})")
 
     wait_for_bot()
 
     full_message = f"{system_prompt}\n\n{message}" if system_prompt else message
 
     while True:
-        print(f"[{time.strftime('%H:%M')}] Triggering bot...", flush=True)
+        now = datetime.now(tz)
+        cron = croniter(cron_expr, now)
+        next_run = cron.get_next(datetime)
+
+        wait_seconds = (next_run - now).total_seconds()
+        print(f"[{now.strftime('%H:%M')}] Next run at {next_run.strftime('%H:%M')} ({int(wait_seconds)}s)", flush=True)
+
+        time.sleep(wait_seconds)
+
+        print(f"[{datetime.now(tz).strftime('%H:%M')}] Triggering bot...", flush=True)
         response = send_to_bot(full_message)
         if response:
             print(f"  Response: {response[:200]}...")
         else:
             print("  (no response)")
-
-        time.sleep(interval_minutes * 60)
 
 
 if __name__ == "__main__":
