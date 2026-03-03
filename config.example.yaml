@@ -103,6 +103,7 @@ hooks:
   # damage_control: true
   # damage_control_patterns: "hooks/patterns.yaml"  # custom path, empty = default locations
 
+model: "claude-sonnet-4-6-20250627"  # Claude model ID (e.g. claude-sonnet-4-6-20250627, claude-opus-4-6-20250627)
 max_turns: 10  # Max agent tool-use rounds per message
 # Persistent memory folder. Auto-creates core/, to_improve/ subdirectories.
 # Memory contents are injected into the system prompt automatically.
