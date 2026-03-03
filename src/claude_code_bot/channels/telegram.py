@@ -46,9 +46,9 @@ SDK_COMMANDS = {
 }
 
 DEFAULT_MODELS = {
-    "sonnet": "claude-sonnet-4-20250514",
-    "opus": "claude-opus-4-20250514",
-    "haiku": "claude-haiku-3-5-20241022",
+    "sonnet": "claude-sonnet-4-6-20250627",
+    "opus": "claude-opus-4-6-20250627",
+    "haiku": "claude-haiku-4-5-20251001",
     "sonnet-3.5": "claude-3-5-sonnet-20241022",
 }
 

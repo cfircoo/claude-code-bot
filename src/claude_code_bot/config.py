@@ -108,7 +108,7 @@ class BotConfig(BaseModel):
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     hooks: HooksConfig = Field(default_factory=HooksConfig)
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-sonnet-4-6-20250627"
     max_turns: int = 10
     log_level: str = "INFO"
     port: int = 8000
